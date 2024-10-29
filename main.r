@@ -22,10 +22,10 @@ print(apply(is.na(CPUs_data), 2, sum)) # nolint
 print(unique(CPUs_data$Lithography))
 
 # Fill forward NAs
-CPUs_data <- na.omit(CPUs_data)
+CPUs_data <- na.omit(CPUs_data) # nolint
 
 # Remove " nm" and convert to numeric
-CPUs_data$Lithography <- as.double(gsub(" nm$", "", CPUs_data$Lithography))
+CPUs_data$Lithography <- as.double(gsub(" nm$", "", CPUs_data$Lithography)) # nolint
 
 # Create a table of the lithography values
 lithography_table <- table(CPUs_data$Lithography)
@@ -33,12 +33,12 @@ print(lithography_table)
 
 table(CPUs_data$Bus_Speed)
  
-CPUs_data <- separate(CPUs_data, Bus_Speed, c("Bus_Speed_Value", "Bus_Speed_Unit", "Bus_Interface_type"), sep = " ")
-CPUs_data$Bus_Speed_Value <- as.numeric(CPUs_data$Bus_Speed_Value)
-CPUs_data$Bus_Speed_Unit_GTs <- c(str_extract(CPUs_data$Bus_Speed_Unit, "GT/s"))
-CPUs_data <- na.omit(CPUs_data)
-CPUs_data <- select(CPUs_data, -Bus_Speed_Unit_GTs)
-CPUs_data <- select(CPUs_data, -Bus_Speed_Unit)
+CPUs_data <- separate(CPUs_data, Bus_Speed, c("Bus_Speed_Value", "Bus_Speed_Unit", "Bus_Interface_type"), sep = " ") # nolint
+CPUs_data$Bus_Speed_Value <- as.numeric(CPUs_data$Bus_Speed_Value) # nolint
+CPUs_data$Bus_Speed_Unit_GTs <- c(str_extract(CPUs_data$Bus_Speed_Unit, "GT/s")) # nolint
+CPUs_data <- na.omit(CPUs_data) # nolint
+CPUs_data <- select(CPUs_data, -Bus_Speed_Unit_GTs) # nolint
+CPUs_data <- select(CPUs_data, -Bus_Speed_Unit) # nolint
 
 
 # Drop all the N/A in this row
@@ -58,14 +58,14 @@ max_memory_bandwidth_clean <- function(mem) {
 CPUs_data$Max_Memory_Bandwidth <- sapply(CPUs_data$Max_Memory_Bandwidth, max_memory_bandwidth_clean) # apply to a table with only numeric # nolint
 CPUs_data <- CPUs_data[!is.na(CPUs_data$Max_Memory_Bandwidth), ] # Remove rows with NA #nolint
 # Now you can check the result
-# table(CPUs_data$Max_Memory_Bandwidth)
+table(CPUs_data$Max_Memory_Bandwidth)
 
 # Drop rows with any NA values in relevant columns
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("nb_of_Threads", "Processor_Base_Frequency")]), ] #nolint
 table(CPUs_data$nb_of_Threads)
 # Function to convert Processor_Base_Frequency
 base_frequency <- function(f) {
-  if (grepl(" GHz", f)){
+  if (grepl(" GHz", f)) {
     return(as.double(gsub(" GHz", "", f)) * 1000) # Convert GHz to MHz
   }
   return(as.double(gsub(" MHz", "", f))) # Keep MHz as is
@@ -75,13 +75,13 @@ base_frequency <- function(f) {
 CPUs_data$Processor_Base_Frequency <- as.integer(sapply(CPUs_data$Processor_Base_Frequency, base_frequency)) # Convert to int #nolint
 
 # Drop any remaining rows with NA in Processor_Base_Frequency after conversion
-CPUs_data <- CPUs_data[!is.na(CPUs_data$Processor_Base_Frequency), ]
+CPUs_data <- CPUs_data[!is.na(CPUs_data$Processor_Base_Frequency), ] # nolint
 
-CPUs_data$TDP <- as.double(gsub(" W", "", CPUs_data$TDP))
-mean_TDP <- mean(CPUs_data$TDP, na.rm = TRUE)
-CPUs_data$TDP[is.na(CPUs_data$TDP)] <- mean_TDP
+CPUs_data$TDP <- as.double(gsub(" W", "", CPUs_data$TDP)) # nolint
+mean_TDP <- mean(CPUs_data$TDP, na.rm = TRUE) # nolint
+CPUs_data$TDP[is.na(CPUs_data$TDP)] <- mean_TDP # nolint
 
-Cache_Clean_Size <- function(size){
+Cache_Clean_Size <- function(size){ # nolint
     if (grepl(' K', size)){ # nolint
         return(as.double(gsub(" K", "", size)) / 1024) # nolint
     } # nolint
@@ -91,13 +91,13 @@ Cache_Clean_Size <- function(size){
 CPUs_data <- separate(CPUs_data, Cache, into = c("Cache_Size", "Cache_Type"), sep = "B") # nolint
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("Cache_Size", "Cache_Type")]), ] #nolint
 #solving string and transform to int
-CPUs_data$Cache_Size <- sapply(CPUs_data$Cache_Size, Cache_Clean_Size)
-CPUs_data$Cache_Size <- log(CPUs_data$Cache_Size) # stabilize variance
+CPUs_data$Cache_Size <- sapply(CPUs_data$Cache_Size, Cache_Clean_Size) # nolint
+CPUs_data$Cache_Size <- log(CPUs_data$Cache_Size) # stabilize variance # nolint
 #seperate will remove some data so we need to add it back
 CPUs_data$Cache_Type <- ifelse(CPUs_data$Cache_Type == "", "Normal", sub(" ", "", CPUs_data$Cache_Type)) # nolint
 table(CPUs_data$Cache_Type)
 
-CPUs_data <- CPUs_data[!is.na(CPUs_data$Instruction_Set), ]
+CPUs_data <- CPUs_data[!is.na(CPUs_data$Instruction_Set), ] # nolint
 table(CPUs_data$Instruction_Set)
 
 print(apply(is.na(CPUs_data),2,sum)) # nolint: commas_linter.
