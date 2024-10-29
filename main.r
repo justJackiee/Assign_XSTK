@@ -77,9 +77,8 @@ CPUs_data$Processor_Base_Frequency <- as.integer(sapply(CPUs_data$Processor_Base
 # Drop any remaining rows with NA in Processor_Base_Frequency after conversion
 CPUs_data <- CPUs_data[!is.na(CPUs_data$Processor_Base_Frequency), ] # nolint
 
-CPUs_data$TDP <- as.double(gsub(" W", "", CPUs_data$TDP)) # nolint
-mean_TDP <- mean(CPUs_data$TDP, na.rm = TRUE) # nolint
-CPUs_data$TDP[is.na(CPUs_data$TDP)] <- mean_TDP # nolint
+CPUs_data$TDP <- as.double(gsub(" W", "", CPUs_data$TDP)) # Remove " W" and convert to double
+CPUs_data <- CPUs_data[!is.na(CPUs_data$TDP), ] # Drop rows with NA in TDP
 
 Cache_Clean_Size <- function(size){ # nolint
     if (grepl(' K', size)){ # nolint
