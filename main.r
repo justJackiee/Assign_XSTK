@@ -100,3 +100,73 @@ CPUs_data <- CPUs_data[!is.na(CPUs_data$Instruction_Set), ] # nolint
 table(CPUs_data$Instruction_Set)
 
 print(apply(is.na(CPUs_data),2,sum)) # nolint: commas_linter.
+
+str(CPUs_data)
+# chia dữ liệu thành hai loại định tính và định lượng
+numerical_cols <- c("Lithography", "nb_of_Cores", "nb_of_Threads",
+                   "Processor_Base_Frequency","Cache_Size","TDP","Max_Memory_Size" #nolint
+                   , "Max_nb_of_Memory_Channels",
+                   "Max_Memory_Bandwidth", "Bus_Speed_Value")
+categorical_cols <- c("Cache_Type", "Instruction_Set",
+                      "Bus_Interface_type")
+
+#-------------------------------------------------------------------------------------- #nolint
+# tạo bảng thống kê các dữ liệu định lượng
+summary_numeric_table <- data.frame(
+  Staticstic=c("Count", "Mean", "STD", "Min", "First Quantile", "Median", "Third Quantile", "Max") #nolint
+)
+
+convert_to_numeric <- function(x) {
+  as.numeric(gsub("[^0-9\\.]", "", x))  # Loại bỏ các ký tự không phải số hoặc dấu chấm #nolint
+}
+
+
+for (i in numerical_cols){
+  #loại bỏ tên của vector
+  if (is.character(CPUs_data[[i]])) {
+    numeric_data <- convert_to_numeric(CPUs_data[[i]])  # Chuyển dữ liệu dạng ký tự về số #nolint
+  } else {
+    numeric_data <- unname(CPUs_data[[i]])  # Loại bỏ tên khỏi các giá trị
+  }
+  #tính toán từng cols
+  count <- length(numeric_data)
+  mean <- mean(numeric_data)
+  std <- sd(numeric_data)
+  min <- min(numeric_data)
+  first_quantile <- quantile(numeric_data, probs = 0.25)
+  median <- median(numeric_data)
+  third_quantile <- quantile(numeric_data, probs = 0.75)
+  max <- max(numeric_data)
+  summary_numeric_table <- cbind(summary_numeric_table, new_col = c(count, mean, std, min, #nolint
+                                                                    first_quantile, median, # nolint
+                                                                    third_quantile, max)) #nolint
+}
+#chỉnh lại tên cột hợp lí
+colnames(summary_numeric_table)[-1] <- numerical_cols
+summary_numeric_table
+
+cor_data <- cor(CPUs_data[numerical_cols])
+
+
+#------------------------------------------------------------------------------------ #nolint
+#tạo bảng thống kê biến định tính
+summary_categorical_table <- data.frame(
+  Staticstic = c("Count", "Unique", "Mode", "Freq")
+)
+
+Mode <- function(x) { #nolint
+  uniqx <- unique(x)  # Tìm các giá trị duy nhất
+  uniqx[which.max(tabulate(match(x, uniqx)))]  # Tìm giá trị xuất hiện nhiều nhất #nolint
+}
+#tạo bảng theo các biến định tính
+for(i in categorical_cols){
+  count <- length(CPUs_data[[i]])
+  unique <- length(unique(CPUs_data[[i]]))
+  mode <- as.character(Mode(CPUs_data[[i]]))
+  freq <- sum(CPUs_data[[i]] == mode)
+  summary_categorical_table <- cbind(summary_categorical_table, new_col = c(count, #nolint
+                                                                         unique, #nolint
+                                                                         mode,freq)) #nolint
+}
+#đổi lại tên cột cho hợp lí
+colnames(summary_categorical_table)[-1] <- categorical_cols
