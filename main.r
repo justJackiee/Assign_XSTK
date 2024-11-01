@@ -91,7 +91,7 @@ CPUs_data <- separate(CPUs_data, Cache, into = c("Cache_Size", "Cache_Type"), se
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("Cache_Size", "Cache_Type")]), ] #nolint
 #solving string and transform to int
 CPUs_data$Cache_Size <- sapply(CPUs_data$Cache_Size, Cache_Clean_Size) # nolint
-CPUs_data$Cache_Size <- log(CPUs_data$Cache_Size) # stabilize variance # nolint
+table(CPUs_data$Cache_Size)
 #seperate will remove some data so we need to add it back
 CPUs_data$Cache_Type <- ifelse(CPUs_data$Cache_Type == "", "Normal", sub(" ", "", CPUs_data$Cache_Type)) # nolint
 table(CPUs_data$Cache_Type)
@@ -170,3 +170,70 @@ for(i in categorical_cols){
 }
 #đổi lại tên cột cho hợp lí
 colnames(summary_categorical_table)[-1] <- categorical_cols
+#------------------------------------------------------------------------------------ #nolint
+# vẽ biểu đồ phân phối đồ thị cho biến Bus_speed_value
+ggplot(CPUs_data, aes(x = Bus_Speed_Value)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Bus Speed Value",
+       x = "Bus Speed Value",
+       y = "Frequency") +
+  theme_minimal()
+# vẽ biểu đồ phân phối đồ thị cho biến nb_of_cores
+ggplot(CPUs_data, aes(x = nb_of_Cores)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Number of Cores",
+       x = "Number of Cores",
+       y = "Frequency") +
+  theme_minimal()
+# Vẽ biểu đồ phân phối đồ thị cho biến nb_of_Threads
+ggplot(CPUs_data, aes(x = nb_of_Threads, y = after_stat(density))) +
+  geom_histogram(binwidth = 2, fill = "green", color = "black", alpha = 0.7) +
+  labs(title = "Probability Distribution of Number of Threads",
+       x = "Number of Threads",
+       y = "Density") +
+  theme_minimal()
+
+# vẽ đồ thị phân phối xác suất tích lũy cho biến Bus_speed_value
+ggplot(CPUs_data, aes(x = Bus_Speed_Value)) +
+  stat_ecdf(geom = "step", color = "blue") +
+  labs(title = "Cumulative Distribution Plot of Bus Speed Value",
+       x = "Bus Speed Value",
+       y = "Cumulative Probability") +
+  theme_minimal()
+# vẽ đồ thị thể hiện sự phân phối của Bus_speed_value theo phân loại của biến Bus_interface_type
+ggplot(CPUs_data, aes(x = Bus_Interface_type, y = Bus_Speed_Value)) +
+  geom_boxplot(fill = "lightblue", outlier.colour = "red", outlier.shape = 16, outlier.size = 2, alpha = 0.7) +
+  labs(title = "Boxplot of Bus Speed Value by Bus Interface Type",
+       x = "Bus Interface Type",
+       y = "Bus Speed Value (GT/s)") +
+  theme_minimal()
+# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến Processor base frequency
+ggplot(CPUs_data, aes(x = Processor_Base_Frequency, y = Bus_Speed_Value)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  labs(title = "Scatter Plot of Bus Speed Value vs Processor Base Frequency",
+       x = "Processor Base Frequency (MHz)",
+       y = "Bus Speed Value (GT/s)") +
+  theme_minimal()
+# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến nb_of_cores
+ggplot(CPUs_data, aes(x = nb_of_Cores, y = Bus_Speed_Value)) +
+  geom_point(color = "green", alpha = 0.6) +
+  labs(title = "Scatter Plot of Bus Speed Value vs Number of Cores",
+       x = "Number of Cores",
+       y = "Bus Speed Value (GT/s)") +
+  theme_minimal()
+# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến nb_of_threads
+ggplot(CPUs_data, aes(x = nb_of_Threads, y = Bus_Speed_Value)) +
+  geom_point(color = "purple", alpha = 0.6) +
+  labs(title = "Scatter Plot of Bus Speed Value vs Number of Threads",
+       x = "Number of Threads",
+       y = "Bus Speed Value (GT/s)") +
+  theme_minimal()
+# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến Cache_value
+ggplot(CPUs_data, aes(x = Cache_Size, y = Bus_Speed_Value)) +
+  geom_point(color = "orange", alpha = 0.6) +
+  labs(title = "Scatter Plot of Bus Speed Value vs Cache Size",
+       x = "Cache Size (log scale)",
+       y = "Bus Speed Value (GT/s)") +
+  theme_minimal()
+
+
