@@ -10,12 +10,13 @@ library(reshape2)
 library(mltools)
 library(DescTools) # nolint
 library(plotly)
+library(car)
 Intel_CPUs = read.csv("dataset/Intel_CPUs.csv", na.strings = c("", "N/A")) # nolint # c is base in R
 CPUs_data = Intel_CPUs[,c("Lithography", # nolint 
                       "nb_of_Cores","nb_of_Threads","Processor_Base_Frequency", # nolint
-                      "Cache","Instruction_Set","TDP","Max_Memory_Size","Max_nb_of_Memory_Channels","Max_Memory_Bandwidth", "Bus_Speed")] # nolint
+                      "Cache","Instruction_Set","TDP","Max_Memory_Size","Max_nb_of_Memory_Channels","Max_Memory_Bandwidth", "Bus_Speed", "Recommended_Customer_Price", "Product_Collection")] # nolint
 # Print out table of summary data
-# print(summary(CPUs_data)) # nolint
+print(summary(CPUs_data)) # nolint
 # Check for N/A data in the table
 print(apply(is.na(CPUs_data), 2, sum)) # nolint
 
@@ -60,6 +61,12 @@ CPUs_data <- CPUs_data[!is.na(CPUs_data$Max_Memory_Bandwidth), ] # Remove rows w
 # Now you can check the result
 table(CPUs_data$Max_Memory_Bandwidth)
 
+product_collect <- c('Legacy', 'Celeron', 'Pentium', 'Quark', 'Atom', 'Itanium', 'Xeon','Core')
+for (i in product_collect) {
+    # nhóm dữ liệu thành các loại dòng chip hiện tại
+  CPUs_data$Product_Collection <- ifelse(grepl(i, CPUs_data$Product_Collection), i, CPUs_data$Product_Collection)
+}
+
 # Drop rows with any NA values in relevant columns
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("nb_of_Threads", "Processor_Base_Frequency")]), ] #nolint
 table(CPUs_data$nb_of_Threads)
@@ -70,6 +77,22 @@ base_frequency <- function(f) {
   }
   return(as.double(gsub(" MHz", "", f))) # Keep MHz as is
 }
+
+recommend_price <- function(price_range) {
+  if(grepl('-', price_range)) {
+    range <- strsplit(price_range, "-")[[1]]
+    return((as.double(range[1]) + as.double(range[2])) / 2)
+  }
+  return (price_range)
+}
+# sửa định dạng chuỗi
+CPUs_data$Recommended_Customer_Price <- gsub("\\$", "", CPUs_data$Recommended_Customer_Price) 
+CPUs_data$Recommended_Customer_Price <- gsub(",", "", CPUs_data$Recommended_Customer_Price)
+# apply hàm để xử lý số liệu
+CPUs_data$Recommended_Customer_Price <- sapply(CPUs_data$Recommended_Customer_Price, recommend_price) 
+CPUs_data$Recommended_Customer_Price <- as.double(CPUs_data$Recommended_Customer_Price) 
+
+table(CPUs_data$Recommended_Customer_Price)
 
 # Apply the base_frequency function
 CPUs_data$Processor_Base_Frequency <- as.integer(sapply(CPUs_data$Processor_Base_Frequency, base_frequency)) # Convert to int #nolint
@@ -104,11 +127,11 @@ print(apply(is.na(CPUs_data),2,sum)) # nolint: commas_linter.
 str(CPUs_data)
 # chia dữ liệu thành hai loại định tính và định lượng
 numerical_cols <- c("Lithography", "nb_of_Cores", "nb_of_Threads",
-                   "Processor_Base_Frequency","Cache_Size","TDP","Max_Memory_Size" #nolint
-                   , "Max_nb_of_Memory_Channels",
-                   "Max_Memory_Bandwidth", "Bus_Speed_Value")
+                    "Processor_Base_Frequency","Cache_Size","TDP","Max_Memory_Size" #nolint
+                    , "Max_nb_of_Memory_Channels",
+                    "Max_Memory_Bandwidth", "Bus_Speed_Value","Recommended_Customer_Price")
 categorical_cols <- c("Cache_Type", "Instruction_Set",
-                      "Bus_Interface_type")
+                      "Bus_Interface_type","Product_Collection")
 
 #-------------------------------------------------------------------------------------- #nolint
 # tạo bảng thống kê các dữ liệu định lượng
@@ -165,75 +188,166 @@ for(i in categorical_cols){
   mode <- as.character(Mode(CPUs_data[[i]]))
   freq <- sum(CPUs_data[[i]] == mode)
   summary_categorical_table <- cbind(summary_categorical_table, new_col = c(count, #nolint
-                                                                         unique, #nolint
-                                                                         mode,freq)) #nolint
+                                                                            unique, #nolint
+                                                                            mode,freq)) #nolint
 }
 #đổi lại tên cột cho hợp lí
 colnames(summary_categorical_table)[-1] <- categorical_cols
+summary_categorical_table
 #------------------------------------------------------------------------------------ #nolint
-# vẽ biểu đồ phân phối đồ thị cho biến Bus_speed_value
-ggplot(CPUs_data, aes(x = Bus_Speed_Value)) +
-  geom_histogram(binwidth = 1, fill = "blue", color = "black", alpha = 0.7) +
-  labs(title = "Distribution of Bus Speed Value",
-       x = "Bus Speed Value",
+#Vẽ đồ thị histogram cho Recommend_Customer_Price
+ggplot(CPUs_data, aes(x = Recommended_Customer_Price)) +
+  geom_histogram(binwidth = 100, fill = "blue", color = "black") +
+  scale_x_continuous(breaks = seq(0, max(CPUs_data$Recommended_Customer_Price, na.rm = TRUE), by = 500)) +
+  labs(title = "Histogram of Recommended Customer Price",
+       x = "Recommended Customer Price", 
        y = "Frequency") +
   theme_minimal()
-# vẽ biểu đồ phân phối đồ thị cho biến nb_of_cores
-ggplot(CPUs_data, aes(x = nb_of_Cores)) +
-  geom_histogram(binwidth = 1, fill = "blue", color = "black", alpha = 0.7) +
-  labs(title = "Distribution of Number of Cores",
-       x = "Number of Cores",
-       y = "Frequency") +
-  theme_minimal()
-# Vẽ biểu đồ phân phối đồ thị cho biến nb_of_Threads
-ggplot(CPUs_data, aes(x = nb_of_Threads, y = after_stat(density))) +
-  geom_histogram(binwidth = 2, fill = "green", color = "black", alpha = 0.7) +
-  labs(title = "Probability Distribution of Number of Threads",
-       x = "Number of Threads",
-       y = "Density") +
-  theme_minimal()
+#Tạo tập biến định lượng
+numeric_vars <- c("Lithography", "nb_of_Cores", "nb_of_Threads", 
+                  "Processor_Base_Frequency", "Cache_Size", "TDP", 
+                  "Max_Memory_Size", "Max_nb_of_Memory_Channels", 
+                  "Max_Memory_Bandwidth", "Bus_Speed_Value")
 
-# vẽ đồ thị phân phối xác suất tích lũy cho biến Bus_speed_value
-ggplot(CPUs_data, aes(x = Bus_Speed_Value)) +
-  stat_ecdf(geom = "step", color = "blue") +
-  labs(title = "Cumulative Distribution Plot of Bus Speed Value",
-       x = "Bus Speed Value",
-       y = "Cumulative Probability") +
-  theme_minimal()
-# vẽ đồ thị thể hiện sự phân phối của Bus_speed_value theo phân loại của biến Bus_interface_type
-ggplot(CPUs_data, aes(x = Bus_Interface_type, y = Bus_Speed_Value)) +
-  geom_boxplot(fill = "lightblue", outlier.colour = "red", outlier.shape = 16, outlier.size = 2, alpha = 0.7) +
-  labs(title = "Boxplot of Bus Speed Value by Bus Interface Type",
-       x = "Bus Interface Type",
-       y = "Bus Speed Value (GT/s)") +
-  theme_minimal()
-# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến Processor base frequency
-ggplot(CPUs_data, aes(x = Processor_Base_Frequency, y = Bus_Speed_Value)) +
-  geom_point(color = "blue", alpha = 0.6) +
-  labs(title = "Scatter Plot of Bus Speed Value vs Processor Base Frequency",
-       x = "Processor Base Frequency (MHz)",
-       y = "Bus Speed Value (GT/s)") +
-  theme_minimal()
-# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến nb_of_cores
-ggplot(CPUs_data, aes(x = nb_of_Cores, y = Bus_Speed_Value)) +
-  geom_point(color = "green", alpha = 0.6) +
-  labs(title = "Scatter Plot of Bus Speed Value vs Number of Cores",
-       x = "Number of Cores",
-       y = "Bus Speed Value (GT/s)") +
-  theme_minimal()
-# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến nb_of_threads
-ggplot(CPUs_data, aes(x = nb_of_Threads, y = Bus_Speed_Value)) +
-  geom_point(color = "purple", alpha = 0.6) +
-  labs(title = "Scatter Plot of Bus Speed Value vs Number of Threads",
-       x = "Number of Threads",
-       y = "Bus Speed Value (GT/s)") +
-  theme_minimal()
-# vẽ biểu đồ phân tán thể hiện phân phối của biến Bus speed value theo biến Cache_value
-ggplot(CPUs_data, aes(x = Cache_Size, y = Bus_Speed_Value)) +
-  geom_point(color = "orange", alpha = 0.6) +
-  labs(title = "Scatter Plot of Bus Speed Value vs Cache Size",
-       x = "Cache Size (log scale)",
-       y = "Bus Speed Value (GT/s)") +
-  theme_minimal()
+# Vòng lặp vẽ scatterplot cho từng biến định lượng
+for (var in numeric_vars) {
+  print(
+    ggplot(CPUs_data, aes_string(x = "Recommended_Customer_Price", y = var)) +
+      geom_point(color = "blue", alpha = 0.7) +
+      labs(title = paste("Scatterplot: Recommended Customer Price vs", var),
+           x = "Recommended Customer Price (USD)", 
+           y = var) +
+      theme_minimal()
+  )
+}
+#Vẽ boxplot cho Recommended_Customer_Price theo Product_Collection
+ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = Product_Collection)) +
+  geom_boxplot(fill = "lightblue", outlier.color = "red", outlier.shape = 16, outlier.size = 2) +
+  labs(title = "Boxplot of Recommended Customer Price by Product Collection",
+       x = "Recommended Customer Price",
+       y = "Product Collection") +
+  theme_minimal()    
+
+# vẽ biểu đồ phân tán thể hiện phân phối của giá thành đề xuất theo Cache Size và Cache Value
+ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = Cache_Size, color = Cache_Type)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(title = "Scatterplot of Cache Size and Recommended Customer Price",
+       x = "Recommended Customer Price",
+       y = "Cache Size (MB)",
+       color = "Cache Type") + 
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12))
 
 
+shapiro_legacy <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Legacy"])
+shapiro_celeron <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Celeron"])
+shapiro_pentium <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Pentium"])
+shapiro_xeon <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Xeon"])
+shapiro_core <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"])
+
+# In kết quả cho từng nhóm
+shapiro_legacy
+shapiro_celeron
+shapiro_pentium
+shapiro_quark
+shapiro_core
+
+library(car)
+# Chỉ giữ lại các nhóm Legacy, Celeron, Pentium, Xeon, Core
+filtered_data <- CPUs_data[CPUs_data$Product_Collection %in% c("Legacy", "Celeron", "Pentium", "Xeon", "Core"), ]
+#QQ-Plot cho nhóm Legacy
+ggplot(filtered_data[filtered_data$Product_Collection == "Legacy", ], aes(sample = Recommended_Customer_Price)) +
+  stat_qq() + stat_qq_line(color = "blue") +
+  labs(title = "QQ Plot for Legacy Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
+
+#QQ-Plot cho nhóm Celeron
+ggplot(filtered_data[filtered_data$Product_Collection == "Celeron", ], aes(sample = Recommended_Customer_Price)) +
+  stat_qq() + stat_qq_line(color = "blue") +
+  labs(title = "QQ Plot for Celeron Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
+
+#QQ-Plot cho nhóm Pentium
+ggplot(filtered_data[filtered_data$Product_Collection == "Pentium", ], aes(sample = Recommended_Customer_Price)) +
+  stat_qq() + stat_qq_line(color = "blue") +
+  labs(title = "QQ Plot for Pentium Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
+
+#QQ-Plot cho nhóm Xeon
+ggplot(filtered_data[filtered_data$Product_Collection == "Xeon", ], aes(sample = Recommended_Customer_Price)) +
+  stat_qq() + stat_qq_line(color = "blue") +
+  labs(title = "QQ Plot for Xeon Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
+
+#QQ-Plot cho nhóm Core
+ggplot(filtered_data[filtered_data$Product_Collection == "Core", ], aes(sample = Recommended_Customer_Price)) +
+  stat_qq() + stat_qq_line(color = "blue") +
+  labs(title = "QQ Plot for Core Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
+
+leveneTest(Recommended_Customer_Price ~ Product_Collection, data = filtered_data)
+# Thực hiện ANOVA trên dữ liệu đã lọc
+
+anova_result <- aov(Recommended_Customer_Price ~ Product_Collection, data = filtered_data)
+summary(anova_result)
+
+# Thực hiện kiểm định Tukey HSD và xem kết quả
+TukeyHSD(anova_result)
+#--------------------- HỒI QUY TUYẾN TÍNH ---------------
+print("Linear here:")
+CPUs_data_backup <- CPUs_data
+CPUs_data_backup <- CPUs_data_backup[, !(names(CPUs_data_backup) %in% c("Instruction_Set"))]
+
+dummy <- dummyVars('~.',data=CPUs_data_backup,sep = ".") 
+CPUs_data_backup <- data.frame(predict(dummy, newdata = CPUs_data_backup))
+
+#chia tập dữ liệu thành train_data(tập huấn luyện) và test_data(tập kiểm tra)
+set.seed(100)
+train_index <- createDataPartition(CPUs_data_backup$Recommended_Customer_Price, p = 0.8, list = FALSE)
+train_data = CPUs_data_backup[train_index,]
+test_data = CPUs_data_backup[-train_index,]
+
+train_data_numeric <- train_data[sapply(train_data, is.numeric)]
+# Tính ma trận tương quan
+corr_matrix <- cor(train_data_numeric)
+
+# Chuyển đổi ma trận tương quan thành dạng long
+melted_corr_mat <- melt(corr_matrix)
+
+# Vẽ heatmap với giá trị thống kê (correlation value) hiển thị
+ggplot(data = melted_corr_mat, aes(Var2, Var1, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                       name = "Pearson\nCorrelation") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 8, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Heatmap of Correlation in train data", x = "", y = "")
+
+model_1 <- lm(Recommended_Customer_Price ~ ., data = train_data)
+summary(model_1)  # Xem thông tin tóm tắt về mô hình
+
+# Dự đoán trên tập huấn luyện và tập kiểm tra
+y_train_pred <- predict(model_1, newdata = train_data)
+y_test_pred <- predict(model_1, newdata = test_data)
+
+# Tính MSE và MAE
+mse_train <- mse(y_train_pred, train_data$Recommended_Customer_Price)
+mse_test <- mse(y_test_pred, test_data$Recommended_Customer_Price)
+mae_train <- mae(y_train_pred, train_data$Recommended_Customer_Price)
+mae_test <- mae(y_test_pred, test_data$Recommended_Customer_Price)
+
+# Tạo bảng tổng hợp các chỉ số đánh giá
+metric <- data.frame(
+  variable = c("MSE", "MSE", "MAE", "MAE"),
+  value = c(mse_train, mse_test, mae_train, mae_test),
+  type = c("train", "test", "train", "test")
+)
+
+# Hiển thị bảng tổng hợp
+print(metric)
+
+options(repr.plot.width = 15, repr.plot.height =10) 
+ggplot(metric,aes(x = variable, y = value,color = type,group=type)) +
+  geom_line() +
+  geom_point(size=4) +
+  labs(x = "", y = "Value", color = "Type")
