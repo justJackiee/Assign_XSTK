@@ -251,7 +251,7 @@ shapiro_core <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Prod
 shapiro_legacy
 shapiro_celeron
 shapiro_pentium
-shapiro_quark
+shapiro_xeon
 shapiro_core
 
 library(car)
