@@ -11,6 +11,7 @@ library(mltools)
 library(DescTools) # nolint
 library(plotly)
 library(car)
+library(scales)
 Intel_CPUs = read.csv("dataset/Intel_CPUs.csv", na.strings = c("", "N/A")) # nolint # c is base in R
 CPUs_data = Intel_CPUs[,c("Lithography", # nolint 
                       "nb_of_Cores","nb_of_Threads","Processor_Base_Frequency", # nolint
@@ -195,51 +196,76 @@ for(i in categorical_cols){
 colnames(summary_categorical_table)[-1] <- categorical_cols
 summary_categorical_table
 #------------------------------------------------------------------------------------ #nolint
-#Vẽ đồ thị histogram cho Recommend_Customer_Price
-ggplot(CPUs_data, aes(x = Recommended_Customer_Price)) +
-  geom_histogram(binwidth = 100, fill = "blue", color = "black") +
-  scale_x_continuous(breaks = seq(0, max(CPUs_data$Recommended_Customer_Price, na.rm = TRUE), by = 500)) +
-  labs(title = "Histogram of Recommended Customer Price",
-       x = "Recommended Customer Price", 
-       y = "Frequency") +
-  theme_minimal()
-#Tạo tập biến định lượng
+# --- FIX 1 (visualization_improvements_guide.md): Log-scaled Histogram with Density ---
+print(
+  ggplot(CPUs_data, aes(x = Recommended_Customer_Price)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 40, fill = "#3182bd", color = "white", alpha = 0.8) +
+    geom_density(color = "#e6550d", linewidth = 1) +
+    scale_x_log10(labels = scales::dollar_format()) +
+    labs(title = "Log-Transformed Distribution of Recommended Customer Price",
+         x = "Recommended Customer Price (USD, Log Scale)",
+         y = "Density") +
+    theme_minimal()
+)
+
+# --- FIX 2 (visualization_improvements_guide.md): Jittered & Log-Scaled Feature Plots ---
 numeric_vars <- c("Lithography", "nb_of_Cores", "nb_of_Threads", 
                   "Processor_Base_Frequency", "Cache_Size", "TDP", 
                   "Max_Memory_Size", "Max_nb_of_Memory_Channels", 
                   "Max_Memory_Bandwidth", "Bus_Speed_Value")
 
-# Vòng lặp vẽ scatterplot cho từng biến định lượng
+# Discrete features benefit from vertical jitter and factor levels
+discrete_features <- c("Lithography", "nb_of_Cores", "nb_of_Threads", 
+                       "Max_nb_of_Memory_Channels", "Bus_Speed_Value")
+
 for (var in numeric_vars) {
-  print(
-    ggplot(CPUs_data, aes_string(x = "Recommended_Customer_Price", y = var)) +
-      geom_point(color = "blue", alpha = 0.7) +
-      labs(title = paste("Scatterplot: Recommended Customer Price vs", var),
-           x = "Recommended Customer Price (USD)", 
+  if (var %in% discrete_features) {
+    p <- ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = factor(.data[[var]]))) +
+      geom_jitter(color = "#2b8cbe", alpha = 0.45, width = 0, height = 0.22, size = 1.6) +
+      scale_x_log10(labels = scales::dollar_format()) +
+      labs(title = paste("Customer Price (Log Scale) vs.", var),
+           x = "Recommended Customer Price (USD, Log Scale)", 
            y = var) +
       theme_minimal()
-  )
+  } else {
+    p <- ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = .data[[var]])) +
+      geom_point(color = "#2b8cbe", alpha = 0.5, size = 1.6) +
+      scale_x_log10(labels = scales::dollar_format()) +
+      labs(title = paste("Customer Price (Log Scale) vs.", var),
+           x = "Recommended Customer Price (USD, Log Scale)", 
+           y = var) +
+      theme_minimal()
+  }
+  print(p)
 }
-#Vẽ boxplot cho Recommended_Customer_Price theo Product_Collection
-ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = Product_Collection)) +
-  geom_boxplot(fill = "lightblue", outlier.color = "red", outlier.shape = 16, outlier.size = 2) +
-  labs(title = "Boxplot of Recommended Customer Price by Product Collection",
-       x = "Recommended Customer Price",
-       y = "Product Collection") +
-  theme_minimal()    
 
-# vẽ biểu đồ phân tán thể hiện phân phối của giá thành đề xuất theo Cache Size và Cache Value
-ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = Cache_Size, color = Cache_Type)) +
-  geom_point(size = 2, alpha = 0.7) +
-  labs(title = "Scatterplot of Cache Size and Recommended Customer Price",
-       x = "Recommended Customer Price",
-       y = "Cache Size (MB)",
-       color = "Cache Type") + 
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-        axis.text = element_text(size = 10),
-        axis.title = element_text(size = 12))
+# --- FIX 3 (visualization_improvements_guide.md): Boxplot + Jitter Overlay on Log Scale ---
+print(
+  ggplot(CPUs_data, aes(x = Product_Collection, y = Recommended_Customer_Price, fill = Product_Collection)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+    geom_jitter(width = 0.2, alpha = 0.35, size = 1.5) +
+    scale_y_log10(labels = scales::dollar_format()) +
+    labs(title = "Price Distribution across Product Collections (Log Scale)",
+         x = "Product Collection",
+         y = "Recommended Customer Price (USD, Log Scale)") +
+    theme_minimal() +
+    theme(legend.position = "none")
+)
 
+# --- FIX 4 (visualization_improvements_guide.md): Faceted Multi-Category Plot ---
+print(
+  ggplot(CPUs_data, aes(x = Cache_Size, y = Recommended_Customer_Price, color = Cache_Type)) +
+    geom_point(alpha = 0.6, size = 1.8) +
+    scale_y_log10(labels = scales::dollar_format()) +
+    facet_wrap(~ Cache_Type) +
+    labs(title = "Price vs. Cache Size Faceted by Cache Type (Log Scale)",
+         x = "Cache Size (MB)",
+         y = "Recommended Customer Price (USD, Log Scale)",
+         color = "Cache Type") +
+    theme_bw() +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 13, face = "bold"))
+)
 
 shapiro_legacy <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Legacy"])
 shapiro_celeron <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Celeron"])
@@ -290,64 +316,223 @@ summary(anova_result)
 
 # Thực hiện kiểm định Tukey HSD và xem kết quả
 TukeyHSD(anova_result)
-#--------------------- HỒI QUY TUYẾN TÍNH ---------------
-print("Linear here:")
-CPUs_data_backup <- CPUs_data
-CPUs_data_backup <- CPUs_data_backup[, !(names(CPUs_data_backup) %in% c("Instruction_Set"))]
 
-dummy <- dummyVars('~.',data=CPUs_data_backup,sep = ".") 
-CPUs_data_backup <- data.frame(predict(dummy, newdata = CPUs_data_backup))
+#--------------------- KIỂM ĐỊNH MỘT MẪU (ONE-SAMPLE TEST) ---------------------
+print("=== 1-SAMPLE TEST: Core Price vs Target MSRP ($300) ===")
+# Kiểm tra xem mức giá trung bình của dòng CPU phổ thông (Core) có bằng mức giá chuẩn $300 hay không
+core_price <- CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"]
+print(paste("Sample size of Core:", length(core_price)))
+print(paste("Mean price of Core:", round(mean(core_price), 2)))
+print(paste("SD of Core:", round(sd(core_price), 2)))
 
-#chia tập dữ liệu thành train_data(tập huấn luyện) và test_data(tập kiểm tra)
-set.seed(100)
-train_index <- createDataPartition(CPUs_data_backup$Recommended_Customer_Price, p = 0.8, list = FALSE)
-train_data = CPUs_data_backup[train_index,]
-test_data = CPUs_data_backup[-train_index,]
+# 1. Kiểm định giả định phân phối chuẩn (đã tính ở shapiro_core, in lại p-value)
+shapiro_core_1s <- shapiro.test(core_price)
+print(shapiro_core_1s)
 
-train_data_numeric <- train_data[sapply(train_data, is.numeric)]
-# Tính ma trận tương quan
-corr_matrix <- cor(train_data_numeric)
+# 2. Kiểm định One-Sample t-test: H0: mu = 300 vs H1: mu != 300
+t_one_sample <- t.test(core_price, mu = 300)
+print(t_one_sample)
 
-# Chuyển đổi ma trận tương quan thành dạng long
-melted_corr_mat <- melt(corr_matrix)
+# 3. Kiểm định phi tham số Wilcoxon Signed-Rank test (dự phòng khi phân phối lệch)
+wilcox_one_sample <- wilcox.test(core_price, mu = 300)
+print(wilcox_one_sample)
 
-# Vẽ heatmap với giá trị thống kê (correlation value) hiển thị
-ggplot(data = melted_corr_mat, aes(Var2, Var1, fill = value)) +
-  geom_tile(color = "white") +
-  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
-                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
-                       name = "Pearson\nCorrelation") +
-  theme_minimal() + 
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
-                                   size = 8, hjust = 1)) +
-  coord_fixed() +
-  labs(title = "Heatmap of Correlation in train data", x = "", y = "")
+#--------------------- KIỂM ĐỊNH HAI MẪU (TWO-SAMPLE TEST) ---------------------
+print("=== 2-SAMPLE TEST: Core vs Xeon Price ===")
+# Lọc 2 nhóm đại diện lớn nhất: Core (phổ thông/tiêu dùng) và Xeon (máy chủ/doanh nghiệp)
+two_sample_data <- CPUs_data[CPUs_data$Product_Collection %in% c("Core", "Xeon"), ]
+two_sample_data$Product_Collection <- droplevels(as.factor(two_sample_data$Product_Collection))
 
-model_1 <- lm(Recommended_Customer_Price ~ ., data = train_data)
-summary(model_1)  # Xem thông tin tóm tắt về mô hình
+# 1. Kiểm định phương sai đồng nhất (Levene's Test)
+levene_2s <- leveneTest(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data)
+print(levene_2s)
 
-# Dự đoán trên tập huấn luyện và tập kiểm tra
-y_train_pred <- predict(model_1, newdata = train_data)
-y_test_pred <- predict(model_1, newdata = test_data)
+# 2. Thực hiện Two-Sample t-test (chọn Welch t-test do phương sai khác nhau)
+equal_var <- levene_2s$`Pr(>F)`[1] > 0.05
+if (equal_var) {
+  t_two_sample <- t.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, var.equal = TRUE)
+} else {
+  t_two_sample <- t.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, var.equal = FALSE)
+}
+print(t_two_sample)
 
-# Tính MSE và MAE
-mse_train <- mse(y_train_pred, train_data$Recommended_Customer_Price)
-mse_test <- mse(y_test_pred, test_data$Recommended_Customer_Price)
-mae_train <- mae(y_train_pred, train_data$Recommended_Customer_Price)
-mae_test <- mae(y_test_pred, test_data$Recommended_Customer_Price)
+# 3. Kiểm định phi tham số Mann-Whitney U (Wilcoxon Rank-Sum test)
+mw_two_sample <- wilcox.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, exact = FALSE)
+print(mw_two_sample)
 
-# Tạo bảng tổng hợp các chỉ số đánh giá
-metric <- data.frame(
-  variable = c("MSE", "MSE", "MAE", "MAE"),
-  value = c(mse_train, mse_test, mae_train, mae_test),
-  type = c("train", "test", "train", "test")
+# 4. Tính độ lớn ảnh hưởng (Cohen's d)
+n1 <- sum(two_sample_data$Product_Collection == "Core")
+n2 <- sum(two_sample_data$Product_Collection == "Xeon")
+s1 <- sd(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Core"])
+s2 <- sd(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Xeon"])
+sp <- sqrt(((n1 - 1) * s1^2 + (n2 - 1) * s2^2) / (n1 + n2 - 2))
+m1 <- mean(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Core"])
+m2 <- mean(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Xeon"])
+cohens_d <- (m1 - m2) / sp
+print(paste("Cohen's d:", round(cohens_d, 3)))
+
+# Vẽ boxplot so sánh Core vs Xeon
+print(
+  ggplot(two_sample_data, aes(x = Product_Collection, y = Recommended_Customer_Price, fill = Product_Collection)) +
+    geom_boxplot(outlier.color = "red", outlier.shape = 16, outlier.size = 2) +
+    labs(title = "Boxplot of Recommended Customer Price: Core vs Xeon",
+         x = "Product Collection", y = "Recommended Customer Price (USD)") +
+    theme_minimal() +
+    theme(legend.position = "none")
 )
 
-# Hiển thị bảng tổng hợp
-print(metric)
+#--------------------- HỒI QUY TUYẾN TÍNH (REGRESSION) -------------------------
+print("=== REGRESSION MODELLING ===")
+reg_data <- CPUs_data[!is.na(CPUs_data$Recommended_Customer_Price), ]
+# Lọc 5 dòng chip chính có đủ số lượng quan sát
+reg_data <- reg_data[reg_data$Product_Collection %in% c("Legacy", "Celeron", "Pentium", "Xeon", "Core"), ]
 
-options(repr.plot.width = 15, repr.plot.height =10) 
-ggplot(metric,aes(x = variable, y = value,color = type,group=type)) +
-  geom_line() +
-  geom_point(size=4) +
-  labs(x = "", y = "Value", color = "Type")
+# Dùng Log_Price để khắc phục độ lệch phải nặng của giá
+reg_data$Log_Price <- log(reg_data$Recommended_Customer_Price)
+reg_data$Product_Collection <- droplevels(as.factor(reg_data$Product_Collection))
+reg_data$Bus_Interface_type <- droplevels(as.factor(reg_data$Bus_Interface_type))
+
+# Gộp các mức factor hiếm (< 30 quan sát) thành 'Other' để tránh lỗi khi cross-validation
+collapse_rare <- function(x, min_n = 30) {
+  tab <- table(x)
+  x <- as.character(x)
+  x[x %in% names(tab)[tab < min_n]] <- "Other"
+  return(as.factor(x))
+}
+reg_data$Cache_Type <- collapse_rare(reg_data$Cache_Type, min_n = 30)
+
+# Chia tập dữ liệu 80% train - 20% test
+set.seed(100)
+train_index <- createDataPartition(reg_data$Log_Price, p = 0.8, list = FALSE)
+train_data <- reg_data[train_index, ]
+test_data  <- reg_data[-train_index, ]
+
+# --- FIX 6 (visualization_improvements_guide.md): Spearman & Log-Scale Correlation Matrix ---
+# Tính tương quan Spearman (cho mối quan hệ phi tuyến đơn điệu)
+train_data_numeric <- train_data[sapply(train_data, is.numeric)]
+corr_matrix_spearman <- cor(train_data_numeric, method = "spearman")
+melted_corr_spearman <- melt(corr_matrix_spearman)
+
+print(
+  ggplot(data = melted_corr_spearman, aes(Var2, Var1, fill = value)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = sprintf("%.2f", value)), size = 2.7) +
+    scale_fill_gradient2(low = "#2166ac", high = "#b2182b", mid = "#f7f7f7", 
+                         midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                         name = "Spearman\nCorrelation") +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 8, hjust = 1),
+          axis.text.y = element_text(size = 8)) +
+    coord_fixed() +
+    labs(title = "Spearman Rank Correlation Heatmap (Train Data)", x = "", y = "")
+)
+
+# 1. HỒI QUY TUYẾN TÍNH ĐƠN (SIMPLE LINEAR REGRESSION)
+print("--- 1. Simple Linear Regression (Log_Price ~ Cache_Size) ---")
+simple_model <- lm(Log_Price ~ Cache_Size, data = train_data)
+summary(simple_model)
+
+# Dự đoán trên train và test cho hồi quy đơn
+y_train_simple <- predict(simple_model, newdata = train_data)
+y_test_simple  <- predict(simple_model, newdata = test_data)
+
+mse_train_simple <- mse(y_train_simple, train_data$Log_Price)
+mse_test_simple  <- mse(y_test_simple, test_data$Log_Price)
+mae_train_simple_usd <- mean(abs(exp(y_train_simple) - train_data$Recommended_Customer_Price))
+mae_test_simple_usd  <- mean(abs(exp(y_test_simple) - test_data$Recommended_Customer_Price))
+
+# Vẽ đồ thị đường hồi quy tuyến tính đơn
+print(
+  ggplot(train_data, aes(x = Cache_Size, y = Log_Price)) +
+    geom_point(color = "darkblue", alpha = 0.5) +
+    geom_smooth(method = "lm", color = "red", se = TRUE) +
+    labs(title = "Simple Linear Regression: Log(Price) vs Cache Size",
+         x = "Cache Size (MB)", y = "Log(Recommended Customer Price)") +
+    theme_minimal()
+)
+
+# 2. HỒI QUY TUYẾN TÍNH BỘI (MULTIPLE LINEAR REGRESSION)
+print("--- 2. Multiple Linear Regression with stepAIC ---")
+predictors <- c("Lithography", "nb_of_Cores", "nb_of_Threads", 
+                "Processor_Base_Frequency", "Cache_Size", "TDP", 
+                "Max_Memory_Size", "Max_nb_of_Memory_Channels", 
+                "Max_Memory_Bandwidth", "Bus_Speed_Value", 
+                "Bus_Interface_type", "Product_Collection", "Cache_Type")
+
+full_formula <- as.formula(paste("Log_Price ~", paste(predictors, collapse = " + ")))
+full_model <- lm(full_formula, data = train_data)
+
+# Tự động chọn biến tối ưu bằng stepAIC trên tập train
+multi_model <- stepAIC(full_model, direction = "both", trace = FALSE)
+summary(multi_model)
+
+# Kiểm tra số lượng hệ số bị NA (ma trận suy biến)
+na_coefs <- sum(is.na(coef(multi_model)))
+print(paste("So he so bi NA (ma tran suy bien):", na_coefs))
+
+# Dự đoán mô hình hồi quy bội
+y_train_multi <- predict(multi_model, newdata = train_data)
+y_test_multi  <- predict(multi_model, newdata = test_data)
+
+mse_train_multi <- mse(y_train_multi, train_data$Log_Price)
+mse_test_multi  <- mse(y_test_multi, test_data$Log_Price)
+mae_train_multi_usd <- mean(abs(exp(y_train_multi) - train_data$Recommended_Customer_Price))
+mae_test_multi_usd  <- mean(abs(exp(y_test_multi) - test_data$Recommended_Customer_Price))
+
+# Baseline model: luôn đoán giá trị trung bình Log_Price của tập train
+baseline_pred <- mean(train_data$Log_Price)
+mse_test_baseline <- mean((baseline_pred - test_data$Log_Price)^2)
+
+# 3. KIỂM CHỨNG CHÉO (5-FOLD CROSS VALIDATION)
+cv_regression <- function(data, formula, K = 5, seed = 100) {
+  set.seed(seed)
+  folds <- createFolds(data$Log_Price, k = K, list = TRUE, returnTrain = FALSE)
+  mse_log <- numeric(K)
+  mae_usd <- numeric(K)
+  
+  for (i in seq_len(K)) {
+    te <- data[folds[[i]], ]
+    tr <- data[-folds[[i]], ]
+    fit <- lm(formula, data = tr)
+    pr <- predict(fit, newdata = te)
+    mse_log[i] <- mean((pr - te$Log_Price)^2)
+    mae_usd[i] <- mean(abs(exp(pr) - te$Recommended_Customer_Price))
+  }
+  return(data.frame(CV_MSE_log = mean(mse_log), CV_MAE_USD = mean(mae_usd)))
+}
+
+cv_results <- cv_regression(reg_data, formula(multi_model), K = 5, seed = 100)
+print(cv_results)
+
+# 4. SO SÁNH CÁC MÔ HÌNH
+comparison_table <- data.frame(
+  Model = c("Baseline (Mean)", "Simple Linear (Cache_Size)", "Multiple Linear (stepAIC)"),
+  MSE_Test_Log = c(round(mse_test_baseline, 4), round(mse_test_simple, 4), round(mse_test_multi, 4)),
+  MAE_Test_USD = c(round(mean(abs(exp(baseline_pred) - test_data$Recommended_Customer_Price)), 2),
+                   round(mae_test_simple_usd, 2),
+                   round(mae_test_multi_usd, 2)),
+  R_squared = c(NA, round(summary(simple_model)$r.squared, 4), round(summary(multi_model)$r.squared, 4)),
+  Adj_R_squared = c(NA, round(summary(simple_model)$adj.r.squared, 4), round(summary(multi_model)$adj.r.squared, 4))
+)
+print("=== BANG TONG HOP SO SANH MO HINH ===")
+print(comparison_table)
+
+# 5. CHẨN ĐOÁN PHẦN DƯ HỒI QUY BỘI (DIAGNOSTICS PLOTS)
+par(mfrow = c(2, 2))
+plot(multi_model)
+par(mfrow = c(1, 1))
+
+# Đồ thị so sánh MAE giữa Train và Test
+metric_plot_data <- data.frame(
+  Model = rep(c("Simple Linear", "Multiple Linear"), each = 2),
+  Type = rep(c("Train", "Test"), times = 2),
+  MAE_USD = c(mae_train_simple_usd, mae_test_simple_usd, mae_train_multi_usd, mae_test_multi_usd)
+)
+
+print(
+  ggplot(metric_plot_data, aes(x = Model, y = MAE_USD, fill = Type)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.5) +
+    labs(title = "MAE (USD) Comparison: Simple vs Multiple Linear Regression",
+         y = "MAE (USD)", x = "") +
+    theme_minimal()
+)
