@@ -1,3 +1,10 @@
+# install.packages(c("stringr","tidyr","dplyr","zoo","Metrics","caret","MASS",
+#                    "ggplot2","reshape2","mltools","DescTools","plotly","car"))
+# Rscript's default pdf() device cannot render Vietnamese diacritics in titles
+# (mbcsToSbcs warnings); use cairo_pdf (UTF-8) when run non-interactively.
+if (!interactive()) {
+  options(device = function(...) cairo_pdf("Rplots.pdf", onefile = TRUE))
+}
 library(stringr)
 library(tidyr)
 library(dplyr)
@@ -9,9 +16,9 @@ library(ggplot2)
 library(reshape2)
 library(mltools)
 library(DescTools) # nolint
+library(scales)
 library(plotly)
 library(car)
-library(scales)
 Intel_CPUs = read.csv("dataset/Intel_CPUs.csv", na.strings = c("", "N/A")) # nolint # c is base in R
 CPUs_data = Intel_CPUs[,c("Lithography", # nolint 
                       "nb_of_Cores","nb_of_Threads","Processor_Base_Frequency", # nolint
@@ -43,7 +50,7 @@ print(table(CPUs_data$Bus_Speed))
 # is dropped here, together with the few strings that do not have 3 pieces
 # (the "Expected 3 pieces" warning from separate()).
 rows_before_bus <- nrow(CPUs_data)
-CPUs_data <- separate(CPUs_data, Bus_Speed, c("Bus_Speed_Value", "Bus_Speed_Unit", "Bus_Interface_type"), sep = " ") # nolint
+CPUs_data <- separate(CPUs_data, Bus_Speed, c("Bus_Speed_Value", "Bus_Speed_Unit", "Bus_Interface_type"), sep = " ", fill = "right") # nolint
 CPUs_data$Bus_Speed_Value <- as.numeric(CPUs_data$Bus_Speed_Value) # nolint
 CPUs_data$Bus_Speed_Unit_GTs <- c(str_extract(CPUs_data$Bus_Speed_Unit, "GT/s")) # nolint
 CPUs_data <- na.omit(CPUs_data) # nolint
@@ -146,7 +153,7 @@ categorical_cols <- c("Cache_Type", "Instruction_Set",
 #-------------------------------------------------------------------------------------- #nolint
 # tạo bảng thống kê các dữ liệu định lượng
 summary_numeric_table <- data.frame(
-  Staticstic=c("Count", "Mean", "STD", "Min", "First Quantile", "Median", "Third Quantile", "Max") #nolint
+  Statistic=c("Count", "Mean", "STD", "Min", "First Quantile", "Median", "Third Quantile", "Max") #nolint
 )
 
 convert_to_numeric <- function(x) {
@@ -179,13 +186,17 @@ for (i in numerical_cols){
 colnames(summary_numeric_table)[-1] <- numerical_cols
 print(summary_numeric_table)
 
+# Ma trận tương quan Pearson giữa các biến định lượng (in ra bảng; biểu đồ tương quan
+# dùng Spearman ở phần hồi quy)
 cor_data <- cor(CPUs_data[numerical_cols])
+print("--- Pearson correlation matrix (numerical variables) ---")
+print(round(cor_data, 2))
 
 
 #------------------------------------------------------------------------------------ #nolint
 #tạo bảng thống kê biến định tính
 summary_categorical_table <- data.frame(
-  Staticstic = c("Count", "Unique", "Mode", "Freq")
+  Statistic = c("Count", "Unique", "Mode", "Freq")
 )
 
 Mode <- function(x) { #nolint
@@ -282,146 +293,112 @@ print(
           plot.title = element_text(hjust = 0.5, size = 13, face = "bold"))
 )
 
-shapiro_legacy <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Legacy"])
-shapiro_celeron <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Celeron"])
-shapiro_pentium <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Pentium"])
-shapiro_xeon <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Xeon"])
-shapiro_core <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"])
 
-# In kết quả cho từng nhóm
-print(shapiro_legacy)
-print(shapiro_celeron)
-print(shapiro_pentium)
-print(shapiro_xeon)
-print(shapiro_core)
+#--------------------- BÀI TOÁN 2 MẪU: SO SÁNH 2 TRUNG BÌNH ---------------------
+# H0: mu_Xeon = mu_Core   ;   H1: mu_Xeon > mu_Core
+xeon <- CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Xeon"]
+core <- CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"]
 
-library(car)
-# Chỉ giữ lại các nhóm Legacy, Celeron, Pentium, Xeon, Core
-filtered_data <- CPUs_data[CPUs_data$Product_Collection %in% main_families, ]
-# QQ-Plot cho từng nhóm (bọc trong print() để vẫn hiện khi chạy bằng source())
-for (fam in main_families) {
-  print(
-    ggplot(filtered_data[filtered_data$Product_Collection == fam, ], aes(sample = Recommended_Customer_Price)) +
-      stat_qq() + stat_qq_line(color = "blue") +
-      labs(title = paste("QQ Plot for", fam, "Group"),
-           x = "Theoretical Quantiles", y = "Sample Quantiles (Price, USD)") +
-      theme_minimal()
-  )
-}
+n1 <- length(xeon); x1 <- mean(xeon); s1 <- sd(xeon)
+n2 <- length(core); x2 <- mean(core); s2 <- sd(core)
+data.frame(Nhom = c("Xeon", "Core"), n = c(n1, n2), Mean = c(x1, x2), SD = c(s1, s2))
 
-print(leveneTest(Recommended_Customer_Price ~ Product_Collection, data = filtered_data))
-# Thực hiện ANOVA trên dữ liệu đã lọc
+# Kiểm tra điều kiện
+shapiro.test(xeon)
+shapiro.test(core)
+par(mfrow = c(1, 2))
+qqnorm(xeon, main = "QQ-plot giá - Xeon"); qqline(xeon, col = "red")
+qqnorm(core, main = "QQ-plot giá - Core"); qqline(core, col = "red")
+par(mfrow = c(1, 1))
 
-anova_result <- aov(Recommended_Customer_Price ~ Product_Collection, data = filtered_data)
-print(summary(anova_result))
+# Dạng 4d: hai tổng thể không chuẩn, n1, n2 >= 30
+z_qs <- (x1 - x2) / sqrt(s1^2 / n1 + s2^2 / n2)
+z_qs
+qnorm(0.95)
+1 - pnorm(z_qs)
 
-# Thực hiện kiểm định Tukey HSD và xem kết quả
-print(TukeyHSD(anova_result))
 
-#--------------------- KIỂM ĐỊNH MỘT MẪU (ONE-SAMPLE TEST) ---------------------
-print("=== 1-SAMPLE TEST: Core Price vs Target MSRP ($300) ===")
-# Kiểm tra xem mức giá trung bình của dòng CPU phổ thông (Core) có bằng mức giá chuẩn $300 hay không
-core_price <- CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"]
-print(paste("Sample size of Core:", length(core_price)))
-print(paste("Mean price of Core:", round(mean(core_price), 2)))
-print(paste("SD of Core:", round(sd(core_price), 2)))
+#--------------------- ANOVA 1 YẾU TỐ ---------------------
+# Xét các CPU tiến trình 14 nm, tần số cơ sở có khác nhau theo loại giao tiếp bus không?
+# H0: mu_DMI2 = mu_DMI3 = mu_OPI   ;   H1: tồn tại mu_i != mu_j
+data_1way <- CPUs_data[CPUs_data$Lithography == 14 &
+                         CPUs_data$Bus_Interface_type %in% c("DMI2", "DMI3", "OPI"), ]
+data_1way$Bus_Interface_type <- factor(data_1way$Bus_Interface_type)
 
-# Hàm in kết luận theo p-value (dùng chung cho kiểm định 1 mẫu và 2 mẫu)
-alpha <- 0.05
-conclude_h0 <- function(p_value) {
-  ifelse(p_value < alpha, "bac bo H0", "khong bac bo H0")
-}
+aggregate(Processor_Base_Frequency ~ Bus_Interface_type, data = data_1way,
+          FUN = function(v) c(n = length(v), mean = mean(v), sd = sd(v)))
 
-# 1. Kiểm định giả định phân phối chuẩn (dùng lại shapiro_core đã tính ở trên)
-print(paste("Shapiro-Wilk (Core): W =", round(shapiro_core$statistic, 4),
-            ", p-value =", signif(shapiro_core$p.value, 4)))
+# Kiểm tra điều kiện: phân phối chuẩn
+tapply(data_1way$Processor_Base_Frequency, data_1way$Bus_Interface_type,
+       function(v) shapiro.test(v)$p.value)
+ggplot(data_1way, aes(sample = Processor_Base_Frequency)) +
+  stat_qq() + stat_qq_line(color = "red") +
+  facet_wrap(~ Bus_Interface_type) +
+  labs(title = "QQ-plot tần số cơ sở theo loại giao tiếp bus") +
+  theme_minimal()
 
-# 2. Kiểm định One-Sample t-test: H0: mu = 300 vs H1: mu != 300
-t_one_sample <- t.test(core_price, mu = 300)
-print(t_one_sample)
-print(paste("Ket luan t-test 1 mau: p =", signif(t_one_sample$p.value, 4),
-            "->", conclude_h0(t_one_sample$p.value)))
+# Kiểm tra điều kiện: phương sai bằng nhau
+leveneTest(Processor_Base_Frequency ~ Bus_Interface_type, data = data_1way)
 
-# 3. Kiểm định phi tham số Wilcoxon Signed-Rank test (dự phòng khi phân phối lệch)
-wilcox_one_sample <- wilcox.test(core_price, mu = 300)
-print(wilcox_one_sample)
-print(paste("Ket luan Wilcoxon 1 mau: p =", signif(wilcox_one_sample$p.value, 4),
-            "->", conclude_h0(wilcox_one_sample$p.value)))
+# Bảng ANOVA
+anova_1 <- aov(Processor_Base_Frequency ~ Bus_Interface_type, data = data_1way)
+summary(anova_1)
+qf(0.95, 2, 154)
 
-# Biểu đồ phân phối giá Core so với giá trị giả thuyết $300
-one_sample_lines <- data.frame(
-  value = c(300, mean(core_price)),
-  label = c("H0: mu = $300", paste0("Sample mean = $", round(mean(core_price), 2)))
-)
-print(
-  ggplot(data.frame(price = core_price), aes(x = price)) +
-    geom_histogram(bins = 30, fill = "#3182bd", color = "white", alpha = 0.8) +
-    geom_vline(data = one_sample_lines, aes(xintercept = value, color = label, linetype = label),
-               linewidth = 1) +
-    scale_color_manual(name = "", values = c("#e6550d", "black")) +
-    scale_linetype_manual(name = "", values = c("dashed", "solid")) +
-    scale_x_continuous(labels = scales::dollar_format()) +
-    labs(title = "One-Sample Test: Core Price vs Hypothesised Mean ($300)",
-         x = "Recommended Customer Price (USD)", y = "Count") +
-    theme_minimal() +
-    theme(legend.position = "bottom")
-)
+# Hệ số R^2
+SSB <- summary(anova_1)[[1]]$`Sum Sq`[1]
+SSW <- summary(anova_1)[[1]]$`Sum Sq`[2]
+SSB / (SSB + SSW)
 
-#--------------------- KIỂM ĐỊNH HAI MẪU (TWO-SAMPLE TEST) ---------------------
-print("=== 2-SAMPLE TEST: Core vs Xeon Price ===")
-# Lọc 2 nhóm đại diện lớn nhất: Core (phổ thông/tiêu dùng) và Xeon (máy chủ/doanh nghiệp)
-two_sample_data <- CPUs_data[CPUs_data$Product_Collection %in% c("Core", "Xeon"), ]
-two_sample_data$Product_Collection <- droplevels(as.factor(two_sample_data$Product_Collection))
+# So sánh bội
+PostHocTest(anova_1, method = "lsd")
+TukeyHSD(anova_1)
 
-# 1. Kiểm định phương sai đồng nhất (Levene's Test)
-levene_2s <- leveneTest(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data)
-print(levene_2s)
 
-# 2. Thực hiện Two-Sample t-test: Levene quyết định dùng Student (phương sai bằng nhau)
-#    hay Welch (phương sai khác nhau) - không gán cứng
-equal_var <- levene_2s$`Pr(>F)`[1] > alpha
-print(paste("Kiem dinh duoc chon:", ifelse(equal_var, "Student t-test (var.equal = TRUE)",
-                                           "Welch t-test (var.equal = FALSE)")))
-if (equal_var) {
-  t_two_sample <- t.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, var.equal = TRUE)
-} else {
-  t_two_sample <- t.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, var.equal = FALSE)
-}
-print(t_two_sample)
-print(paste("Ket luan t-test 2 mau: p =", signif(t_two_sample$p.value, 4),
-            "->", conclude_h0(t_two_sample$p.value)))
+#--------------------- ANOVA 2 YẾU TỐ CÓ LẶP ---------------------
+# Yếu tố A: Product_Collection (Celeron, Core, Pentium) ; Yếu tố B: Bus_Interface_type (DMI, DMI3)
+# Biến phụ thuộc: Processor_Base_Frequency
+# H0A: không có ảnh hưởng của A ; H0B: không có ảnh hưởng của B
+# H0AB: không có tương tác giữa A và B
+data_2way <- CPUs_data[CPUs_data$Product_Collection %in% c("Celeron", "Core", "Pentium") &
+                         CPUs_data$Bus_Interface_type %in% c("DMI", "DMI3"), ]
+data_2way$Product_Collection <- factor(data_2way$Product_Collection)
+data_2way$Bus_Interface_type <- factor(data_2way$Bus_Interface_type)
 
-# 3. Kiểm định phi tham số Mann-Whitney U (Wilcoxon Rank-Sum test)
-mw_two_sample <- wilcox.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, exact = FALSE)
-print(mw_two_sample)
-print(paste("Ket luan Mann-Whitney: p =", signif(mw_two_sample$p.value, 4),
-            "->", conclude_h0(mw_two_sample$p.value)))
+# Số quan sát mỗi ô
+table(data_2way$Product_Collection, data_2way$Bus_Interface_type)
 
-# 4. Tính độ lớn ảnh hưởng (Cohen's d)
-#    Lưu ý: d dùng độ lệch chuẩn gộp (pooled SD) trong khi hai phương sai khác nhau rõ rệt,
-#    nên chỉ đọc như một ước lượng xấp xỉ về độ lớn ảnh hưởng.
-n1 <- sum(two_sample_data$Product_Collection == "Core")
-n2 <- sum(two_sample_data$Product_Collection == "Xeon")
-s1 <- sd(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Core"])
-s2 <- sd(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Xeon"])
-sp <- sqrt(((n1 - 1) * s1^2 + (n2 - 1) * s2^2) / (n1 + n2 - 2))
-m1 <- mean(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Core"])
-m2 <- mean(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Xeon"])
-cohens_d <- (m1 - m2) / sp
-print(paste("Cohen's d:", round(cohens_d, 3)))
+aggregate(Processor_Base_Frequency ~ Product_Collection + Bus_Interface_type, data = data_2way,
+          FUN = function(v) c(n = length(v), mean = mean(v), sd = sd(v)))
 
-# Vẽ boxplot so sánh Core vs Xeon (thang log: trên thang USD gốc, Xeon kéo dãn trục
-# làm hộp của Core bị ép sát đáy)
-print(
-  ggplot(two_sample_data, aes(x = Product_Collection, y = Recommended_Customer_Price, fill = Product_Collection)) +
-    geom_boxplot(outlier.shape = NA, alpha = 0.6) +
-    geom_jitter(width = 0.2, alpha = 0.35, size = 1.5) +
-    scale_y_log10(labels = scales::dollar_format()) +
-    labs(title = "Recommended Customer Price: Core vs Xeon (Log Scale)",
-         x = "Product Collection", y = "Recommended Customer Price (USD, Log Scale)") +
-    theme_minimal() +
-    theme(legend.position = "none")
-)
+# Kiểm tra điều kiện: phân phối chuẩn
+tapply(data_2way$Processor_Base_Frequency,
+       list(data_2way$Product_Collection, data_2way$Bus_Interface_type),
+       function(v) shapiro.test(v)$p.value)
+
+# Kiểm tra điều kiện: phương sai
+leveneTest(Processor_Base_Frequency ~ Product_Collection * Bus_Interface_type, data = data_2way)
+
+anova_2 <- aov(Processor_Base_Frequency ~ Product_Collection * Bus_Interface_type, data = data_2way)
+
+# Kiểm tra phần dư
+shapiro.test(residuals(anova_2))
+qqnorm(residuals(anova_2)); qqline(residuals(anova_2), col = "red")
+
+interaction.plot(x.factor = data_2way$Product_Collection,
+                 trace.factor = data_2way$Bus_Interface_type,
+                 response = data_2way$Processor_Base_Frequency,
+                 fun = mean, type = "b", pch = c(16, 17), col = c("blue", "red"),
+                 xlab = "Dòng sản phẩm", ylab = "Tần số cơ sở trung bình (MHz)",
+                 trace.label = "Giao tiếp bus", main = "Biểu đồ tương tác")
+
+# Bảng ANOVA (số quan sát các ô không bằng nhau nên dùng Anova type 2)
+Anova(anova_2, type = 2)
+qf(0.95, 2, 82)
+qf(0.95, 1, 82)
+
+# So sánh bội cho yếu tố A
+TukeyHSD(anova_2, which = "Product_Collection")
 
 #--------------------- HỒI QUY TUYẾN TÍNH (REGRESSION) -------------------------
 print("=== REGRESSION MODELLING ===")
@@ -576,7 +553,8 @@ par(mfrow = c(1, 1))
 
 # Đồ thị so sánh MAE giữa Train, Test và 5-fold CV
 metric_plot_data <- data.frame(
-  Model = rep(c("Simple Linear", "Multiple Linear"), each = 3),
+  Model = factor(rep(c("Simple Linear", "Multiple Linear"), each = 3),
+                 levels = c("Simple Linear", "Multiple Linear")),
   Type = factor(rep(c("Train", "Test", "5-fold CV"), times = 2),
                 levels = c("Train", "Test", "5-fold CV")),
   MAE_USD = c(mae_train_simple_usd, mae_test_simple_usd, cv_results_simple$CV_MAE_USD,
