@@ -23,7 +23,10 @@ print(apply(is.na(CPUs_data), 2, sum)) # nolint
 
 print(unique(CPUs_data$Lithography))
 
-# Fill forward NAs
+# Drop every row that has an NA in ANY of the 13 selected columns (this is a
+# listwise deletion, not a fill-forward). This single step fixes the row set:
+# the later complete.cases()/!is.na() filters only catch NAs that are created
+# afterwards by the string -> number conversions.
 CPUs_data <- na.omit(CPUs_data) # nolint
 
 # Remove " nm" and convert to numeric
@@ -33,12 +36,18 @@ CPUs_data$Lithography <- as.double(gsub(" nm$", "", CPUs_data$Lithography)) # no
 lithography_table <- table(CPUs_data$Lithography)
 print(lithography_table)
 
-table(CPUs_data$Bus_Speed)
- 
+print(table(CPUs_data$Bus_Speed))
+
+# Keep only bus speeds expressed in GT/s so Bus_Speed_Value has ONE unit.
+# Side effect (intended): every CPU whose bus speed is in MHz (FSB-era parts)
+# is dropped here, together with the few strings that do not have 3 pieces
+# (the "Expected 3 pieces" warning from separate()).
+rows_before_bus <- nrow(CPUs_data)
 CPUs_data <- separate(CPUs_data, Bus_Speed, c("Bus_Speed_Value", "Bus_Speed_Unit", "Bus_Interface_type"), sep = " ") # nolint
 CPUs_data$Bus_Speed_Value <- as.numeric(CPUs_data$Bus_Speed_Value) # nolint
 CPUs_data$Bus_Speed_Unit_GTs <- c(str_extract(CPUs_data$Bus_Speed_Unit, "GT/s")) # nolint
 CPUs_data <- na.omit(CPUs_data) # nolint
+print(paste("Bus_Speed filter (GT/s only): rows", rows_before_bus, "->", nrow(CPUs_data)))
 CPUs_data <- select(CPUs_data, -Bus_Speed_Unit_GTs) # nolint
 CPUs_data <- select(CPUs_data, -Bus_Speed_Unit) # nolint
 
@@ -52,7 +61,7 @@ max_mem_size_clean <- function(size) {
   return(as.double(gsub(" TB", "", size)) * 1024)
 }
 CPUs_data$Max_Memory_Size <- sapply(CPUs_data$Max_Memory_Size, max_mem_size_clean) # apply to a table with only numeric # nolint
-table(CPUs_data$Max_Memory_Size)
+print(table(CPUs_data$Max_Memory_Size))
 
 max_memory_bandwidth_clean <- function(mem) {
     return (as.double(strsplit(mem, " ")[[1]][1])) # strsplit() is split mem into 2 part seperate with a blank space. # nolint
@@ -60,7 +69,7 @@ max_memory_bandwidth_clean <- function(mem) {
 CPUs_data$Max_Memory_Bandwidth <- sapply(CPUs_data$Max_Memory_Bandwidth, max_memory_bandwidth_clean) # apply to a table with only numeric # nolint
 CPUs_data <- CPUs_data[!is.na(CPUs_data$Max_Memory_Bandwidth), ] # Remove rows with NA #nolint
 # Now you can check the result
-table(CPUs_data$Max_Memory_Bandwidth)
+print(table(CPUs_data$Max_Memory_Bandwidth))
 
 product_collect <- c('Legacy', 'Celeron', 'Pentium', 'Quark', 'Atom', 'Itanium', 'Xeon','Core')
 for (i in product_collect) {
@@ -70,7 +79,7 @@ for (i in product_collect) {
 
 # Drop rows with any NA values in relevant columns
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("nb_of_Threads", "Processor_Base_Frequency")]), ] #nolint
-table(CPUs_data$nb_of_Threads)
+print(table(CPUs_data$nb_of_Threads))
 # Function to convert Processor_Base_Frequency
 base_frequency <- function(f) {
   if (grepl(" GHz", f)) {
@@ -93,7 +102,7 @@ CPUs_data$Recommended_Customer_Price <- gsub(",", "", CPUs_data$Recommended_Cust
 CPUs_data$Recommended_Customer_Price <- sapply(CPUs_data$Recommended_Customer_Price, recommend_price) 
 CPUs_data$Recommended_Customer_Price <- as.double(CPUs_data$Recommended_Customer_Price) 
 
-table(CPUs_data$Recommended_Customer_Price)
+print(table(CPUs_data$Recommended_Customer_Price))
 
 # Apply the base_frequency function
 CPUs_data$Processor_Base_Frequency <- as.integer(sapply(CPUs_data$Processor_Base_Frequency, base_frequency)) # Convert to int #nolint
@@ -115,13 +124,13 @@ CPUs_data <- separate(CPUs_data, Cache, into = c("Cache_Size", "Cache_Type"), se
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("Cache_Size", "Cache_Type")]), ] #nolint
 #solving string and transform to int
 CPUs_data$Cache_Size <- sapply(CPUs_data$Cache_Size, Cache_Clean_Size) # nolint
-table(CPUs_data$Cache_Size)
+print(table(CPUs_data$Cache_Size))
 #seperate will remove some data so we need to add it back
 CPUs_data$Cache_Type <- ifelse(CPUs_data$Cache_Type == "", "Normal", sub(" ", "", CPUs_data$Cache_Type)) # nolint
-table(CPUs_data$Cache_Type)
+print(table(CPUs_data$Cache_Type))
 
 CPUs_data <- CPUs_data[!is.na(CPUs_data$Instruction_Set), ] # nolint
-table(CPUs_data$Instruction_Set)
+print(table(CPUs_data$Instruction_Set))
 
 print(apply(is.na(CPUs_data),2,sum)) # nolint: commas_linter.
 
@@ -153,21 +162,22 @@ for (i in numerical_cols){
     numeric_data <- unname(CPUs_data[[i]])  # Loại bỏ tên khỏi các giá trị
   }
   #tính toán từng cols
+  # (tên biến có hậu tố _val để không che các hàm mean/min/max/median của R)
   count <- length(numeric_data)
-  mean <- mean(numeric_data)
+  mean_val <- mean(numeric_data)
   std <- sd(numeric_data)
-  min <- min(numeric_data)
+  min_val <- min(numeric_data)
   first_quantile <- quantile(numeric_data, probs = 0.25)
-  median <- median(numeric_data)
+  median_val <- median(numeric_data)
   third_quantile <- quantile(numeric_data, probs = 0.75)
-  max <- max(numeric_data)
-  summary_numeric_table <- cbind(summary_numeric_table, new_col = c(count, mean, std, min, #nolint
-                                                                    first_quantile, median, # nolint
-                                                                    third_quantile, max)) #nolint
+  max_val <- max(numeric_data)
+  summary_numeric_table <- cbind(summary_numeric_table, new_col = c(count, mean_val, std, min_val, #nolint
+                                                                    first_quantile, median_val, # nolint
+                                                                    third_quantile, max_val)) #nolint
 }
 #chỉnh lại tên cột hợp lí
 colnames(summary_numeric_table)[-1] <- numerical_cols
-summary_numeric_table
+print(summary_numeric_table)
 
 cor_data <- cor(CPUs_data[numerical_cols])
 
@@ -185,16 +195,19 @@ Mode <- function(x) { #nolint
 #tạo bảng theo các biến định tính
 for(i in categorical_cols){
   count <- length(CPUs_data[[i]])
-  unique <- length(unique(CPUs_data[[i]]))
-  mode <- as.character(Mode(CPUs_data[[i]]))
-  freq <- sum(CPUs_data[[i]] == mode)
+  n_unique <- length(unique(CPUs_data[[i]]))
+  mode_val <- as.character(Mode(CPUs_data[[i]]))
+  freq <- sum(CPUs_data[[i]] == mode_val)
   summary_categorical_table <- cbind(summary_categorical_table, new_col = c(count, #nolint
-                                                                            unique, #nolint
-                                                                            mode,freq)) #nolint
+                                                                            n_unique, #nolint
+                                                                            mode_val,freq)) #nolint
 }
 #đổi lại tên cột cho hợp lí
 colnames(summary_categorical_table)[-1] <- categorical_cols
-summary_categorical_table
+print(summary_categorical_table)
+
+# Năm dòng chip có đủ số quan sát; dùng chung cho biểu đồ, kiểm định và hồi quy
+main_families <- c("Legacy", "Celeron", "Pentium", "Xeon", "Core")
 #------------------------------------------------------------------------------------ #nolint
 # --- FIX 1 (visualization_improvements_guide.md): Log-scaled Histogram with Density ---
 print(
@@ -240,8 +253,10 @@ for (var in numeric_vars) {
 }
 
 # --- FIX 3 (visualization_improvements_guide.md): Boxplot + Jitter Overlay on Log Scale ---
+# Chỉ vẽ 5 dòng chip chính: nhóm còn lại (Atom) chỉ có 1 quan sát, không tạo được boxplot
 print(
-  ggplot(CPUs_data, aes(x = Product_Collection, y = Recommended_Customer_Price, fill = Product_Collection)) +
+  ggplot(CPUs_data[CPUs_data$Product_Collection %in% main_families, ],
+         aes(x = Product_Collection, y = Recommended_Customer_Price, fill = Product_Collection)) +
     geom_boxplot(outlier.shape = NA, alpha = 0.6) +
     geom_jitter(width = 0.2, alpha = 0.35, size = 1.5) +
     scale_y_log10(labels = scales::dollar_format()) +
@@ -274,48 +289,34 @@ shapiro_xeon <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Prod
 shapiro_core <- shapiro.test(CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"])
 
 # In kết quả cho từng nhóm
-shapiro_legacy
-shapiro_celeron
-shapiro_pentium
-shapiro_xeon
-shapiro_core
+print(shapiro_legacy)
+print(shapiro_celeron)
+print(shapiro_pentium)
+print(shapiro_xeon)
+print(shapiro_core)
 
 library(car)
 # Chỉ giữ lại các nhóm Legacy, Celeron, Pentium, Xeon, Core
-filtered_data <- CPUs_data[CPUs_data$Product_Collection %in% c("Legacy", "Celeron", "Pentium", "Xeon", "Core"), ]
-#QQ-Plot cho nhóm Legacy
-ggplot(filtered_data[filtered_data$Product_Collection == "Legacy", ], aes(sample = Recommended_Customer_Price)) +
-  stat_qq() + stat_qq_line(color = "blue") +
-  labs(title = "QQ Plot for Legacy Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
+filtered_data <- CPUs_data[CPUs_data$Product_Collection %in% main_families, ]
+# QQ-Plot cho từng nhóm (bọc trong print() để vẫn hiện khi chạy bằng source())
+for (fam in main_families) {
+  print(
+    ggplot(filtered_data[filtered_data$Product_Collection == fam, ], aes(sample = Recommended_Customer_Price)) +
+      stat_qq() + stat_qq_line(color = "blue") +
+      labs(title = paste("QQ Plot for", fam, "Group"),
+           x = "Theoretical Quantiles", y = "Sample Quantiles (Price, USD)") +
+      theme_minimal()
+  )
+}
 
-#QQ-Plot cho nhóm Celeron
-ggplot(filtered_data[filtered_data$Product_Collection == "Celeron", ], aes(sample = Recommended_Customer_Price)) +
-  stat_qq() + stat_qq_line(color = "blue") +
-  labs(title = "QQ Plot for Celeron Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
-
-#QQ-Plot cho nhóm Pentium
-ggplot(filtered_data[filtered_data$Product_Collection == "Pentium", ], aes(sample = Recommended_Customer_Price)) +
-  stat_qq() + stat_qq_line(color = "blue") +
-  labs(title = "QQ Plot for Pentium Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
-
-#QQ-Plot cho nhóm Xeon
-ggplot(filtered_data[filtered_data$Product_Collection == "Xeon", ], aes(sample = Recommended_Customer_Price)) +
-  stat_qq() + stat_qq_line(color = "blue") +
-  labs(title = "QQ Plot for Xeon Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
-
-#QQ-Plot cho nhóm Core
-ggplot(filtered_data[filtered_data$Product_Collection == "Core", ], aes(sample = Recommended_Customer_Price)) +
-  stat_qq() + stat_qq_line(color = "blue") +
-  labs(title = "QQ Plot for Core Group", x = "Theoretical Quantiles", y = "Sample Quantiles") + theme_minimal()
-
-leveneTest(Recommended_Customer_Price ~ Product_Collection, data = filtered_data)
+print(leveneTest(Recommended_Customer_Price ~ Product_Collection, data = filtered_data))
 # Thực hiện ANOVA trên dữ liệu đã lọc
 
 anova_result <- aov(Recommended_Customer_Price ~ Product_Collection, data = filtered_data)
-summary(anova_result)
+print(summary(anova_result))
 
 # Thực hiện kiểm định Tukey HSD và xem kết quả
-TukeyHSD(anova_result)
+print(TukeyHSD(anova_result))
 
 #--------------------- KIỂM ĐỊNH MỘT MẪU (ONE-SAMPLE TEST) ---------------------
 print("=== 1-SAMPLE TEST: Core Price vs Target MSRP ($300) ===")
@@ -325,17 +326,46 @@ print(paste("Sample size of Core:", length(core_price)))
 print(paste("Mean price of Core:", round(mean(core_price), 2)))
 print(paste("SD of Core:", round(sd(core_price), 2)))
 
-# 1. Kiểm định giả định phân phối chuẩn (đã tính ở shapiro_core, in lại p-value)
-shapiro_core_1s <- shapiro.test(core_price)
-print(shapiro_core_1s)
+# Hàm in kết luận theo p-value (dùng chung cho kiểm định 1 mẫu và 2 mẫu)
+alpha <- 0.05
+conclude_h0 <- function(p_value) {
+  ifelse(p_value < alpha, "bac bo H0", "khong bac bo H0")
+}
+
+# 1. Kiểm định giả định phân phối chuẩn (dùng lại shapiro_core đã tính ở trên)
+print(paste("Shapiro-Wilk (Core): W =", round(shapiro_core$statistic, 4),
+            ", p-value =", signif(shapiro_core$p.value, 4)))
 
 # 2. Kiểm định One-Sample t-test: H0: mu = 300 vs H1: mu != 300
 t_one_sample <- t.test(core_price, mu = 300)
 print(t_one_sample)
+print(paste("Ket luan t-test 1 mau: p =", signif(t_one_sample$p.value, 4),
+            "->", conclude_h0(t_one_sample$p.value)))
 
 # 3. Kiểm định phi tham số Wilcoxon Signed-Rank test (dự phòng khi phân phối lệch)
 wilcox_one_sample <- wilcox.test(core_price, mu = 300)
 print(wilcox_one_sample)
+print(paste("Ket luan Wilcoxon 1 mau: p =", signif(wilcox_one_sample$p.value, 4),
+            "->", conclude_h0(wilcox_one_sample$p.value)))
+
+# Biểu đồ phân phối giá Core so với giá trị giả thuyết $300
+one_sample_lines <- data.frame(
+  value = c(300, mean(core_price)),
+  label = c("H0: mu = $300", paste0("Sample mean = $", round(mean(core_price), 2)))
+)
+print(
+  ggplot(data.frame(price = core_price), aes(x = price)) +
+    geom_histogram(bins = 30, fill = "#3182bd", color = "white", alpha = 0.8) +
+    geom_vline(data = one_sample_lines, aes(xintercept = value, color = label, linetype = label),
+               linewidth = 1) +
+    scale_color_manual(name = "", values = c("#e6550d", "black")) +
+    scale_linetype_manual(name = "", values = c("dashed", "solid")) +
+    scale_x_continuous(labels = scales::dollar_format()) +
+    labs(title = "One-Sample Test: Core Price vs Hypothesised Mean ($300)",
+         x = "Recommended Customer Price (USD)", y = "Count") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+)
 
 #--------------------- KIỂM ĐỊNH HAI MẪU (TWO-SAMPLE TEST) ---------------------
 print("=== 2-SAMPLE TEST: Core vs Xeon Price ===")
@@ -347,20 +377,29 @@ two_sample_data$Product_Collection <- droplevels(as.factor(two_sample_data$Produ
 levene_2s <- leveneTest(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data)
 print(levene_2s)
 
-# 2. Thực hiện Two-Sample t-test (chọn Welch t-test do phương sai khác nhau)
-equal_var <- levene_2s$`Pr(>F)`[1] > 0.05
+# 2. Thực hiện Two-Sample t-test: Levene quyết định dùng Student (phương sai bằng nhau)
+#    hay Welch (phương sai khác nhau) - không gán cứng
+equal_var <- levene_2s$`Pr(>F)`[1] > alpha
+print(paste("Kiem dinh duoc chon:", ifelse(equal_var, "Student t-test (var.equal = TRUE)",
+                                           "Welch t-test (var.equal = FALSE)")))
 if (equal_var) {
   t_two_sample <- t.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, var.equal = TRUE)
 } else {
   t_two_sample <- t.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, var.equal = FALSE)
 }
 print(t_two_sample)
+print(paste("Ket luan t-test 2 mau: p =", signif(t_two_sample$p.value, 4),
+            "->", conclude_h0(t_two_sample$p.value)))
 
 # 3. Kiểm định phi tham số Mann-Whitney U (Wilcoxon Rank-Sum test)
 mw_two_sample <- wilcox.test(Recommended_Customer_Price ~ Product_Collection, data = two_sample_data, exact = FALSE)
 print(mw_two_sample)
+print(paste("Ket luan Mann-Whitney: p =", signif(mw_two_sample$p.value, 4),
+            "->", conclude_h0(mw_two_sample$p.value)))
 
 # 4. Tính độ lớn ảnh hưởng (Cohen's d)
+#    Lưu ý: d dùng độ lệch chuẩn gộp (pooled SD) trong khi hai phương sai khác nhau rõ rệt,
+#    nên chỉ đọc như một ước lượng xấp xỉ về độ lớn ảnh hưởng.
 n1 <- sum(two_sample_data$Product_Collection == "Core")
 n2 <- sum(two_sample_data$Product_Collection == "Xeon")
 s1 <- sd(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Collection == "Core"])
@@ -371,21 +410,23 @@ m2 <- mean(two_sample_data$Recommended_Customer_Price[two_sample_data$Product_Co
 cohens_d <- (m1 - m2) / sp
 print(paste("Cohen's d:", round(cohens_d, 3)))
 
-# Vẽ boxplot so sánh Core vs Xeon
+# Vẽ boxplot so sánh Core vs Xeon (thang log: trên thang USD gốc, Xeon kéo dãn trục
+# làm hộp của Core bị ép sát đáy)
 print(
   ggplot(two_sample_data, aes(x = Product_Collection, y = Recommended_Customer_Price, fill = Product_Collection)) +
-    geom_boxplot(outlier.color = "red", outlier.shape = 16, outlier.size = 2) +
-    labs(title = "Boxplot of Recommended Customer Price: Core vs Xeon",
-         x = "Product Collection", y = "Recommended Customer Price (USD)") +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+    geom_jitter(width = 0.2, alpha = 0.35, size = 1.5) +
+    scale_y_log10(labels = scales::dollar_format()) +
+    labs(title = "Recommended Customer Price: Core vs Xeon (Log Scale)",
+         x = "Product Collection", y = "Recommended Customer Price (USD, Log Scale)") +
     theme_minimal() +
     theme(legend.position = "none")
 )
 
 #--------------------- HỒI QUY TUYẾN TÍNH (REGRESSION) -------------------------
 print("=== REGRESSION MODELLING ===")
-reg_data <- CPUs_data[!is.na(CPUs_data$Recommended_Customer_Price), ]
 # Lọc 5 dòng chip chính có đủ số lượng quan sát
-reg_data <- reg_data[reg_data$Product_Collection %in% c("Legacy", "Celeron", "Pentium", "Xeon", "Core"), ]
+reg_data <- CPUs_data[CPUs_data$Product_Collection %in% main_families, ]
 
 # Dùng Log_Price để khắc phục độ lệch phải nặng của giá
 reg_data$Log_Price <- log(reg_data$Recommended_Customer_Price)
@@ -410,6 +451,8 @@ test_data  <- reg_data[-train_index, ]
 # --- FIX 6 (visualization_improvements_guide.md): Spearman & Log-Scale Correlation Matrix ---
 # Tính tương quan Spearman (cho mối quan hệ phi tuyến đơn điệu)
 train_data_numeric <- train_data[sapply(train_data, is.numeric)]
+# Bỏ giá gốc: hạng của nó trùng hoàn toàn với Log_Price nên chỉ tạo ra hàng/cột lặp
+train_data_numeric <- train_data_numeric[, setdiff(names(train_data_numeric), "Recommended_Customer_Price")]
 corr_matrix_spearman <- cor(train_data_numeric, method = "spearman")
 melted_corr_spearman <- melt(corr_matrix_spearman)
 
@@ -430,14 +473,14 @@ print(
 # 1. HỒI QUY TUYẾN TÍNH ĐƠN (SIMPLE LINEAR REGRESSION)
 print("--- 1. Simple Linear Regression (Log_Price ~ Cache_Size) ---")
 simple_model <- lm(Log_Price ~ Cache_Size, data = train_data)
-summary(simple_model)
+print(summary(simple_model))
 
 # Dự đoán trên train và test cho hồi quy đơn
 y_train_simple <- predict(simple_model, newdata = train_data)
 y_test_simple  <- predict(simple_model, newdata = test_data)
 
-mse_train_simple <- mse(y_train_simple, train_data$Log_Price)
-mse_test_simple  <- mse(y_test_simple, test_data$Log_Price)
+mse_train_simple <- mse(train_data$Log_Price, y_train_simple)
+mse_test_simple  <- mse(test_data$Log_Price, y_test_simple)
 mae_train_simple_usd <- mean(abs(exp(y_train_simple) - train_data$Recommended_Customer_Price))
 mae_test_simple_usd  <- mean(abs(exp(y_test_simple) - test_data$Recommended_Customer_Price))
 
@@ -445,7 +488,7 @@ mae_test_simple_usd  <- mean(abs(exp(y_test_simple) - test_data$Recommended_Cust
 print(
   ggplot(train_data, aes(x = Cache_Size, y = Log_Price)) +
     geom_point(color = "darkblue", alpha = 0.5) +
-    geom_smooth(method = "lm", color = "red", se = TRUE) +
+    geom_smooth(method = "lm", formula = y ~ x, color = "red", se = TRUE) +
     labs(title = "Simple Linear Regression: Log(Price) vs Cache Size",
          x = "Cache Size (MB)", y = "Log(Recommended Customer Price)") +
     theme_minimal()
@@ -464,7 +507,7 @@ full_model <- lm(full_formula, data = train_data)
 
 # Tự động chọn biến tối ưu bằng stepAIC trên tập train
 multi_model <- stepAIC(full_model, direction = "both", trace = FALSE)
-summary(multi_model)
+print(summary(multi_model))
 
 # Kiểm tra số lượng hệ số bị NA (ma trận suy biến)
 na_coefs <- sum(is.na(coef(multi_model)))
@@ -474,8 +517,8 @@ print(paste("So he so bi NA (ma tran suy bien):", na_coefs))
 y_train_multi <- predict(multi_model, newdata = train_data)
 y_test_multi  <- predict(multi_model, newdata = test_data)
 
-mse_train_multi <- mse(y_train_multi, train_data$Log_Price)
-mse_test_multi  <- mse(y_test_multi, test_data$Log_Price)
+mse_train_multi <- mse(train_data$Log_Price, y_train_multi)
+mse_test_multi  <- mse(test_data$Log_Price, y_test_multi)
 mae_train_multi_usd <- mean(abs(exp(y_train_multi) - train_data$Recommended_Customer_Price))
 mae_test_multi_usd  <- mean(abs(exp(y_test_multi) - test_data$Recommended_Customer_Price))
 
@@ -504,6 +547,12 @@ cv_regression <- function(data, formula, K = 5, seed = 100) {
 cv_results <- cv_regression(reg_data, formula(multi_model), K = 5, seed = 100)
 print(cv_results)
 
+# CV cho cả hồi quy đơn (cùng seed -> cùng các fold): một lần chia 80/20 cho MAE train
+# lớn hơn MAE test ở mô hình đơn, đó là do may rủi của lần chia chứ không phải do mô hình
+cv_results_simple <- cv_regression(reg_data, formula(simple_model), K = 5, seed = 100)
+print("--- 5-fold CV: Simple Linear Regression ---")
+print(cv_results_simple)
+
 # 4. SO SÁNH CÁC MÔ HÌNH
 comparison_table <- data.frame(
   Model = c("Baseline (Mean)", "Simple Linear (Cache_Size)", "Multiple Linear (stepAIC)"),
@@ -511,28 +560,35 @@ comparison_table <- data.frame(
   MAE_Test_USD = c(round(mean(abs(exp(baseline_pred) - test_data$Recommended_Customer_Price)), 2),
                    round(mae_test_simple_usd, 2),
                    round(mae_test_multi_usd, 2)),
+  CV_MSE_Log = c(NA, round(cv_results_simple$CV_MSE_log, 4), round(cv_results$CV_MSE_log, 4)),
+  CV_MAE_USD = c(NA, round(cv_results_simple$CV_MAE_USD, 2), round(cv_results$CV_MAE_USD, 2)),
   R_squared = c(NA, round(summary(simple_model)$r.squared, 4), round(summary(multi_model)$r.squared, 4)),
   Adj_R_squared = c(NA, round(summary(simple_model)$adj.r.squared, 4), round(summary(multi_model)$adj.r.squared, 4))
 )
 print("=== BANG TONG HOP SO SANH MO HINH ===")
 print(comparison_table)
 
-# 5. CHẨN ĐOÁN PHẦN DƯ HỒI QUY BỘI (DIAGNOSTICS PLOTS)
+# 5. CHẨN ĐOÁN PHẦN DƯ (DIAGNOSTICS PLOTS) - mỗi mô hình một trang 2x2
 par(mfrow = c(2, 2))
-plot(multi_model)
+plot(simple_model, sub.caption = "Residual Diagnostics: Simple Linear Regression (Log_Price ~ Cache_Size)")
+plot(multi_model, sub.caption = "Residual Diagnostics: Multiple Linear Regression (stepAIC)")
 par(mfrow = c(1, 1))
 
-# Đồ thị so sánh MAE giữa Train và Test
+# Đồ thị so sánh MAE giữa Train, Test và 5-fold CV
 metric_plot_data <- data.frame(
-  Model = rep(c("Simple Linear", "Multiple Linear"), each = 2),
-  Type = rep(c("Train", "Test"), times = 2),
-  MAE_USD = c(mae_train_simple_usd, mae_test_simple_usd, mae_train_multi_usd, mae_test_multi_usd)
+  Model = rep(c("Simple Linear", "Multiple Linear"), each = 3),
+  Type = factor(rep(c("Train", "Test", "5-fold CV"), times = 2),
+                levels = c("Train", "Test", "5-fold CV")),
+  MAE_USD = c(mae_train_simple_usd, mae_test_simple_usd, cv_results_simple$CV_MAE_USD,
+              mae_train_multi_usd, mae_test_multi_usd, cv_results$CV_MAE_USD)
 )
 
 print(
   ggplot(metric_plot_data, aes(x = Model, y = MAE_USD, fill = Type)) +
-    geom_bar(stat = "identity", position = "dodge", width = 0.5) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.6) +
+    geom_text(aes(label = scales::dollar(MAE_USD, accuracy = 1)),
+              position = position_dodge(width = 0.6), vjust = -0.4, size = 3.2) +
     labs(title = "MAE (USD) Comparison: Simple vs Multiple Linear Regression",
-         y = "MAE (USD)", x = "") +
+         y = "MAE (USD)", x = "", fill = "") +
     theme_minimal()
 )
