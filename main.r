@@ -1,7 +1,5 @@
 # install.packages(c("stringr","tidyr","dplyr","zoo","Metrics","caret","MASS",
 #                    "ggplot2","reshape2","mltools","DescTools","plotly","car"))
-# Rscript's default pdf() device cannot render Vietnamese diacritics in titles
-# (mbcsToSbcs warnings); use cairo_pdf (UTF-8) when run non-interactively.
 if (!interactive()) {
   options(device = function(...) cairo_pdf("Rplots.pdf", onefile = TRUE))
 }
@@ -23,20 +21,14 @@ Intel_CPUs = read.csv("dataset/Intel_CPUs.csv", na.strings = c("", "N/A")) # nol
 CPUs_data = Intel_CPUs[,c("Lithography", # nolint 
                       "nb_of_Cores","nb_of_Threads","Processor_Base_Frequency", # nolint
                       "Cache","Instruction_Set","TDP","Max_Memory_Size","Max_nb_of_Memory_Channels","Max_Memory_Bandwidth", "Bus_Speed", "Recommended_Customer_Price", "Product_Collection")] # nolint
-# Print out table of summary data
+# summary data
 print(summary(CPUs_data)) # nolint
-# Check for N/A data in the table
+# N/A data in the table
 print(apply(is.na(CPUs_data), 2, sum)) # nolint
 
 print(unique(CPUs_data$Lithography))
 
-# Drop every row that has an NA in ANY of the 13 selected columns (this is a
-# listwise deletion, not a fill-forward). This single step fixes the row set:
-# the later complete.cases()/!is.na() filters only catch NAs that are created
-# afterwards by the string -> number conversions.
 CPUs_data <- na.omit(CPUs_data) # nolint
-
-# Remove " nm" and convert to numeric
 CPUs_data$Lithography <- as.double(gsub(" nm$", "", CPUs_data$Lithography)) # nolint
 
 # Create a table of the lithography values
@@ -45,10 +37,6 @@ print(lithography_table)
 
 print(table(CPUs_data$Bus_Speed))
 
-# Keep only bus speeds expressed in GT/s so Bus_Speed_Value has ONE unit.
-# Side effect (intended): every CPU whose bus speed is in MHz (FSB-era parts)
-# is dropped here, together with the few strings that do not have 3 pieces
-# (the "Expected 3 pieces" warning from separate()).
 rows_before_bus <- nrow(CPUs_data)
 CPUs_data <- separate(CPUs_data, Bus_Speed, c("Bus_Speed_Value", "Bus_Speed_Unit", "Bus_Interface_type"), sep = " ", fill = "right") # nolint
 CPUs_data$Bus_Speed_Value <- as.numeric(CPUs_data$Bus_Speed_Value) # nolint
@@ -59,7 +47,7 @@ CPUs_data <- select(CPUs_data, -Bus_Speed_Unit_GTs) # nolint
 CPUs_data <- select(CPUs_data, -Bus_Speed_Unit) # nolint
 
 
-# Drop all the N/A in this row
+# Drop N/A in this row
 CPUs_data <- CPUs_data[complete.cases(CPUs_data$Max_Memory_Size), ] # count Max_Mem_Size # nolint
 max_mem_size_clean <- function(size) {
   if (grepl("G", size)) {
@@ -71,11 +59,11 @@ CPUs_data$Max_Memory_Size <- sapply(CPUs_data$Max_Memory_Size, max_mem_size_clea
 print(table(CPUs_data$Max_Memory_Size))
 
 max_memory_bandwidth_clean <- function(mem) {
-    return (as.double(strsplit(mem, " ")[[1]][1])) # strsplit() is split mem into 2 part seperate with a blank space. # nolint
+    return (as.double(strsplit(mem, " ")[[1]][1]))# nolint
 }
-CPUs_data$Max_Memory_Bandwidth <- sapply(CPUs_data$Max_Memory_Bandwidth, max_memory_bandwidth_clean) # apply to a table with only numeric # nolint
+CPUs_data$Max_Memory_Bandwidth <- sapply(CPUs_data$Max_Memory_Bandwidth, max_memory_bandwidth_clean)# nolint
 CPUs_data <- CPUs_data[!is.na(CPUs_data$Max_Memory_Bandwidth), ] # Remove rows with NA #nolint
-# Now you can check the result
+# result
 print(table(CPUs_data$Max_Memory_Bandwidth))
 
 product_collect <- c('Legacy', 'Celeron', 'Pentium', 'Quark', 'Atom', 'Itanium', 'Xeon','Core')
@@ -84,10 +72,10 @@ for (i in product_collect) {
   CPUs_data$Product_Collection <- ifelse(grepl(i, CPUs_data$Product_Collection), i, CPUs_data$Product_Collection)
 }
 
-# Drop rows with any NA values in relevant columns
+# Drop rows with NA values
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("nb_of_Threads", "Processor_Base_Frequency")]), ] #nolint
 print(table(CPUs_data$nb_of_Threads))
-# Function to convert Processor_Base_Frequency
+# Convert Processor_Base_Frequency
 base_frequency <- function(f) {
   if (grepl(" GHz", f)) {
     return(as.double(gsub(" GHz", "", f)) * 1000) # Convert GHz to MHz
@@ -126,13 +114,13 @@ Cache_Clean_Size <- function(size){ # nolint
     } # nolint
     return(as.double(gsub(" M", "", size)))
 }
-#spilt the data into 2 part include cache size and cache type
+
 CPUs_data <- separate(CPUs_data, Cache, into = c("Cache_Size", "Cache_Type"), sep = "B") # nolint
 CPUs_data <- CPUs_data[complete.cases(CPUs_data[, c("Cache_Size", "Cache_Type")]), ] #nolint
 #solving string and transform to int
 CPUs_data$Cache_Size <- sapply(CPUs_data$Cache_Size, Cache_Clean_Size) # nolint
 print(table(CPUs_data$Cache_Size))
-#seperate will remove some data so we need to add it back
+#seperate will remove some data so need to add it back
 CPUs_data$Cache_Type <- ifelse(CPUs_data$Cache_Type == "", "Normal", sub(" ", "", CPUs_data$Cache_Type)) # nolint
 print(table(CPUs_data$Cache_Type))
 
@@ -166,7 +154,7 @@ for (i in numerical_cols){
   if (is.character(CPUs_data[[i]])) {
     numeric_data <- convert_to_numeric(CPUs_data[[i]])  # Chuyển dữ liệu dạng ký tự về số #nolint
   } else {
-    numeric_data <- unname(CPUs_data[[i]])  # Loại bỏ tên khỏi các giá trị
+    numeric_data <- unname(CPUs_data[[i]])
   }
   #tính toán từng cols
   # (tên biến có hậu tố _val để không che các hàm mean/min/max/median của R)
@@ -182,7 +170,7 @@ for (i in numerical_cols){
                                                                     first_quantile, median_val, # nolint
                                                                     third_quantile, max_val)) #nolint
 }
-#chỉnh lại tên cột hợp lí
+#chỉnh lại tên cột
 colnames(summary_numeric_table)[-1] <- numerical_cols
 print(summary_numeric_table)
 
@@ -213,86 +201,130 @@ for(i in categorical_cols){
                                                                             n_unique, #nolint
                                                                             mode_val,freq)) #nolint
 }
-#đổi lại tên cột cho hợp lí
+#đổi lại tên cột
 colnames(summary_categorical_table)[-1] <- categorical_cols
 print(summary_categorical_table)
 
 # Năm dòng chip có đủ số quan sát; dùng chung cho biểu đồ, kiểm định và hồi quy
 main_families <- c("Legacy", "Celeron", "Pentium", "Xeon", "Core")
-#------------------------------------------------------------------------------------ #nolint
-# --- FIX 1 (visualization_improvements_guide.md): Log-scaled Histogram with Density ---
+
+
+#--------------------- 1. HISTOGRAM ---------------------
+# Histogram giá trên thang gốc
+hist(CPUs_data$Recommended_Customer_Price, breaks = 40,
+     col = "#3182bd", border = "white",
+     main = "Histogram of Recommended Customer Price",
+     xlab = "Recommended Customer Price (USD)", ylab = "Frequency")
+
+# Histogram log(giá), kèm đường mật độ
 print(
   ggplot(CPUs_data, aes(x = Recommended_Customer_Price)) +
-    geom_histogram(aes(y = after_stat(density)), bins = 40, fill = "#3182bd", color = "white", alpha = 0.8) +
+    geom_histogram(aes(y = after_stat(density)), bins = 40,
+                   fill = "#3182bd", color = "white", alpha = 0.8) +
     geom_density(color = "#e6550d", linewidth = 1) +
     scale_x_log10(labels = scales::dollar_format()) +
     labs(title = "Log-Transformed Distribution of Recommended Customer Price",
-         x = "Recommended Customer Price (USD, Log Scale)",
-         y = "Density") +
+         x = "Recommended Customer Price (USD, Log Scale)", y = "Density") +
     theme_minimal()
 )
 
-# --- FIX 2 (visualization_improvements_guide.md): Jittered & Log-Scaled Feature Plots ---
-numeric_vars <- c("Lithography", "nb_of_Cores", "nb_of_Threads", 
-                  "Processor_Base_Frequency", "Cache_Size", "TDP", 
-                  "Max_Memory_Size", "Max_nb_of_Memory_Channels", 
-                  "Max_Memory_Bandwidth", "Bus_Speed_Value")
+# Histogram tần số cơ sở (biến phụ thuộc của phần ANOVA)
+hist(CPUs_data$Processor_Base_Frequency, breaks = 20,
+     col = "#31a354", border = "white",
+     main = "Histogram of Processor Base Frequency",
+     xlab = "Processor Base Frequency (MHz)", ylab = "Frequency")
 
-# Discrete features benefit from vertical jitter and factor levels
-discrete_features <- c("Lithography", "nb_of_Cores", "nb_of_Threads", 
-                       "Max_nb_of_Memory_Channels", "Bus_Speed_Value")
+#--------------------- 2. BOXPLOT ---------------------
 
-for (var in numeric_vars) {
-  if (var %in% discrete_features) {
-    p <- ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = factor(.data[[var]]))) +
-      geom_jitter(color = "#2b8cbe", alpha = 0.45, width = 0, height = 0.22, size = 1.6) +
-      scale_x_log10(labels = scales::dollar_format()) +
-      labs(title = paste("Customer Price (Log Scale) vs.", var),
-           x = "Recommended Customer Price (USD, Log Scale)", 
-           y = var) +
-      theme_minimal()
-  } else {
-    p <- ggplot(CPUs_data, aes(x = Recommended_Customer_Price, y = .data[[var]])) +
-      geom_point(color = "#2b8cbe", alpha = 0.5, size = 1.6) +
-      scale_x_log10(labels = scales::dollar_format()) +
-      labs(title = paste("Customer Price (Log Scale) vs.", var),
-           x = "Recommended Customer Price (USD, Log Scale)", 
-           y = var) +
-      theme_minimal()
-  }
-  print(p)
-}
-
-# --- FIX 3 (visualization_improvements_guide.md): Boxplot + Jitter Overlay on Log Scale ---
-# Chỉ vẽ 5 dòng chip chính: nhóm còn lại (Atom) chỉ có 1 quan sát, không tạo được boxplot
+# Boxplot giá theo họ sản phẩm (thang log)
+price_family <- CPUs_data[CPUs_data$Product_Collection %in% main_families, ]
 print(
-  ggplot(CPUs_data[CPUs_data$Product_Collection %in% main_families, ],
-         aes(x = Product_Collection, y = Recommended_Customer_Price, fill = Product_Collection)) +
+  ggplot(price_family, aes(x = Product_Collection, y = Recommended_Customer_Price,
+                           fill = Product_Collection)) +
     geom_boxplot(outlier.shape = NA, alpha = 0.6) +
     geom_jitter(width = 0.2, alpha = 0.35, size = 1.5) +
     scale_y_log10(labels = scales::dollar_format()) +
-    labs(title = "Price Distribution across Product Collections (Log Scale)",
-         x = "Product Collection",
-         y = "Recommended Customer Price (USD, Log Scale)") +
+    labs(title = "Price by Product Collection (Log Scale)",
+         x = "Product Collection", y = "Recommended Customer Price (USD, Log Scale)") +
     theme_minimal() +
     theme(legend.position = "none")
 )
 
-# --- FIX 4 (visualization_improvements_guide.md): Faceted Multi-Category Plot ---
+# Boxplot tần số cơ sở theo loại giao tiếp bus
+boxplot(Processor_Base_Frequency ~ Bus_Interface_type, data = CPUs_data,
+        col = "#a1d99b",
+        main = "Processor Base Frequency by Bus Interface Type",
+        xlab = "Bus Interface Type", ylab = "Processor Base Frequency (MHz)")
+
+
+#--------------------- 3. PAIRS ---------------------
+pairs_vars <- c("Log_Price", "nb_of_Threads", "Cache_Size", "Processor_Base_Frequency")
+pairs(CPUs_data[, pairs_vars],
+      labels = c("log(Price)", "Threads", "Cache (MB)", "Base Freq (MHz)"),
+      pch = 20, col = rgb(0, 0, 1, 0.3), cex.labels = 1.3,
+      main = "Scatterplot Matrix")
+
+# Hệ số tương quan Pearson giữa log(giá) và các biến trong ma trận phân tán
+print(round(cor(CPUs_data[, pairs_vars])[, "Log_Price"], 2))
+
+# Hệ số tương quan Spearman giữa giá và từng biến định lượng
+numeric_vars <- c("Lithography", "nb_of_Cores", "nb_of_Threads",
+                  "Processor_Base_Frequency", "Cache_Size", "TDP",
+                  "Max_Memory_Size", "Max_nb_of_Memory_Channels",
+                  "Max_Memory_Bandwidth", "Bus_Speed_Value")
+spearman_price <- cor(CPUs_data[, numeric_vars], CPUs_data$Recommended_Customer_Price,
+                      method = "spearman")
+print(round(spearman_price, 3))
+
+
+#--------------------- 4. GIÁ THEO CACHE ---------------------
 print(
   ggplot(CPUs_data, aes(x = Cache_Size, y = Recommended_Customer_Price, color = Cache_Type)) +
     geom_point(alpha = 0.6, size = 1.8) +
     scale_y_log10(labels = scales::dollar_format()) +
     facet_wrap(~ Cache_Type) +
-    labs(title = "Price vs. Cache Size Faceted by Cache Type (Log Scale)",
-         x = "Cache Size (MB)",
-         y = "Recommended Customer Price (USD, Log Scale)",
-         color = "Cache Type") +
+    labs(title = "Price vs. Cache Size by Cache Type (Log Scale)",
+         x = "Cache Size (MB)", y = "Recommended Customer Price (USD, Log Scale)") +
     theme_bw() +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 13, face = "bold"))
+    theme(legend.position = "none")
 )
+CPUs_data$Log_Price <- NULL
 
+#--------------------- KIEM DINH 1 MAU ---------------------
+# H0: mu_Core = 300   ;   H1: mu_Core != 300
+core_price <- CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"]
+
+n <- length(core_price)
+x_bar <- mean(core_price)
+s <- sd(core_price)
+mu0 <- 300
+data.frame(n = n, Mean = x_bar, Median = median(core_price), SD = s)
+
+# Kiểm tra điều kiện
+shapiro.test(core_price)
+qqnorm(core_price, main = "QQ-plot giá - Core"); qqline(core_price, col = "red")
+
+# Dạng 2c: tổng thể không chuẩn, n >= 30, chưa biết sigma (thay bởi s)
+z_qs <- (x_bar - mu0) / (s / sqrt(n))
+z_qs
+qnorm(0.975)
+2 * (1 - pnorm(abs(z_qs)))
+
+# Khoảng tin cậy 95% cho mu
+x_bar - qnorm(0.975) * s / sqrt(n)
+x_bar + qnorm(0.975) * s / sqrt(n)
+
+# Đối chiếu bằng kiểm định phi tham số Wilcoxon
+wilcox.test(core_price, mu = mu0)
+
+# Histogram giá của Core:
+hist(core_price, breaks = 30, col = "#9ecae1", border = "white",
+     main = "Recommended Customer Price - Core",
+     xlab = "Recommended Customer Price (USD)", ylab = "Frequency")
+abline(v = mu0, col = "red", lwd = 2, lty = 2)
+abline(v = x_bar, col = "darkblue", lwd = 2)
+legend("topright", legend = c("mu0 = 300", "Sample mean"),
+       col = c("red", "darkblue"), lty = c(2, 1), lwd = 2)
 
 #--------------------- BÀI TOÁN 2 MẪU: SO SÁNH 2 TRUNG BÌNH ---------------------
 # H0: mu_Xeon = mu_Core   ;   H1: mu_Xeon > mu_Core
@@ -329,8 +361,7 @@ aggregate(Processor_Base_Frequency ~ Bus_Interface_type, data = data_1way,
           FUN = function(v) c(n = length(v), mean = mean(v), sd = sd(v)))
 
 # Kiểm tra điều kiện: phân phối chuẩn
-tapply(data_1way$Processor_Base_Frequency, data_1way$Bus_Interface_type,
-       function(v) shapiro.test(v)$p.value)
+by(data_1way$Processor_Base_Frequency, data_1way$Bus_Interface_type, shapiro.test)
 ggplot(data_1way, aes(sample = Processor_Base_Frequency)) +
   stat_qq() + stat_qq_line(color = "red") +
   facet_wrap(~ Bus_Interface_type) +
@@ -372,9 +403,8 @@ aggregate(Processor_Base_Frequency ~ Product_Collection + Bus_Interface_type, da
           FUN = function(v) c(n = length(v), mean = mean(v), sd = sd(v)))
 
 # Kiểm tra điều kiện: phân phối chuẩn
-tapply(data_2way$Processor_Base_Frequency,
-       list(data_2way$Product_Collection, data_2way$Bus_Interface_type),
-       function(v) shapiro.test(v)$p.value)
+by(data_2way$Processor_Base_Frequency,
+   list(data_2way$Product_Collection, data_2way$Bus_Interface_type), shapiro.test)
 
 # Kiểm tra điều kiện: phương sai
 leveneTest(Processor_Base_Frequency ~ Product_Collection * Bus_Interface_type, data = data_2way)
