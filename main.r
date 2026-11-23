@@ -258,6 +258,7 @@ boxplot(Processor_Base_Frequency ~ Bus_Interface_type, data = CPUs_data,
 
 
 #--------------------- 3. PAIRS ---------------------
+CPUs_data$Log_Price <- log(CPUs_data$Recommended_Customer_Price)
 pairs_vars <- c("Log_Price", "nb_of_Threads", "Cache_Size", "Processor_Base_Frequency")
 pairs(CPUs_data[, pairs_vars],
       labels = c("log(Price)", "Threads", "Cache (MB)", "Base Freq (MHz)"),
@@ -290,41 +291,72 @@ print(
 )
 CPUs_data$Log_Price <- NULL
 
-#--------------------- KIEM DINH 1 MAU ---------------------
-# H0: mu_Core = 300   ;   H1: mu_Core != 300
+#--------------------- KIỂM ĐỊNH MỘT MẪU (ONE-SAMPLE TEST) ---------------------
+print("=== 1-SAMPLE TEST: Core Price vs Target MSRP ($300) ===")
+# Kiểm tra xem mức giá trung bình của dòng CPU phổ thông (Core) có bằng mức giá chuẩn $300 hay không
 core_price <- CPUs_data$Recommended_Customer_Price[CPUs_data$Product_Collection == "Core"]
+print(paste("Sample size of Core:", length(core_price)))
+print(paste("Mean price of Core:", round(mean(core_price), 2)))
+print(paste("SD of Core:", round(sd(core_price), 2)))
 
+# Hàm in kết luận theo p-value (dùng chung cho kiểm định 1 mẫu và 2 mẫu)
+alpha <- 0.05
+conclude_h0 <- function(p_value) {
+  ifelse(p_value < alpha, "bac bo H0", "khong bac bo H0")
+}
+
+# 1. Kiểm định giả định phân phối chuẩn
+shapiro_core <- shapiro.test(core_price)
+qqnorm(core_price, main = "QQ-plot - Core"); qqline(core_price, col = "red")
+print(paste("Shapiro-Wilk (Core): W =", round(shapiro_core$statistic, 4),
+            ", p-value =", signif(shapiro_core$p.value, 4)))
+
+# 2. Kiểm định Z (dạng 2c: tổng thể không chuẩn, n >= 30, chưa biết sigma)
+#    H0: mu = 300 vs H1: mu != 300  (khớp với báo cáo)
 n <- length(core_price)
 x_bar <- mean(core_price)
 s <- sd(core_price)
 mu0 <- 300
-data.frame(n = n, Mean = x_bar, Median = median(core_price), SD = s)
-
-# Kiểm tra điều kiện
-shapiro.test(core_price)
-qqnorm(core_price, main = "QQ-plot giá - Core"); qqline(core_price, col = "red")
-
-# Dạng 2c: tổng thể không chuẩn, n >= 30, chưa biết sigma (thay bởi s)
 z_qs <- (x_bar - mu0) / (s / sqrt(n))
 z_qs
 qnorm(0.975)
-2 * (1 - pnorm(abs(z_qs)))
-
+p_z <- 2 * (1 - pnorm(abs(z_qs)))
+p_z
+print(paste("Ket luan Z-test 1 mau: p =", signif(p_z, 4), "->", conclude_h0(p_z)))
 # Khoảng tin cậy 95% cho mu
 x_bar - qnorm(0.975) * s / sqrt(n)
 x_bar + qnorm(0.975) * s / sqrt(n)
 
-# Đối chiếu bằng kiểm định phi tham số Wilcoxon
-wilcox.test(core_price, mu = mu0)
+# Đối chiếu bằng t-test (kết quả gần như trùng vì n lớn)
+t_one_sample <- t.test(core_price, mu = mu0)
+print(t_one_sample)
+print(paste("Ket luan t-test 1 mau: p =", signif(t_one_sample$p.value, 4),
+            "->", conclude_h0(t_one_sample$p.value)))
 
-# Histogram giá của Core:
-hist(core_price, breaks = 30, col = "#9ecae1", border = "white",
-     main = "Recommended Customer Price - Core",
-     xlab = "Recommended Customer Price (USD)", ylab = "Frequency")
-abline(v = mu0, col = "red", lwd = 2, lty = 2)
-abline(v = x_bar, col = "darkblue", lwd = 2)
-legend("topright", legend = c("mu0 = 300", "Sample mean"),
-       col = c("red", "darkblue"), lty = c(2, 1), lwd = 2)
+# 3. Kiểm định phi tham số Wilcoxon Signed-Rank test (dự phòng khi phân phối lệch)
+wilcox_one_sample <- wilcox.test(core_price, mu = 300)
+print(wilcox_one_sample)
+print(paste("Ket luan Wilcoxon 1 mau: p =", signif(wilcox_one_sample$p.value, 4),
+            "->", conclude_h0(wilcox_one_sample$p.value)))
+
+# Biểu đồ phân phối giá Core so với giá trị giả thuyết $300
+one_sample_lines <- data.frame(
+  value = c(300, mean(core_price)),
+  label = c("H0: mu = $300", paste0("Sample mean = $", round(mean(core_price), 2)))
+)
+print(
+  ggplot(data.frame(price = core_price), aes(x = price)) +
+    geom_histogram(bins = 30, fill = "#3182bd", color = "white", alpha = 0.8) +
+    geom_vline(data = one_sample_lines, aes(xintercept = value, color = label, linetype = label),
+               linewidth = 1) +
+    scale_color_manual(name = "", values = c("#e6550d", "black")) +
+    scale_linetype_manual(name = "", values = c("dashed", "solid")) +
+    scale_x_continuous(labels = scales::dollar_format()) +
+    labs(title = "One-Sample Test: Core Price vs Hypothesised Mean ($300)",
+         x = "Recommended Customer Price (USD)", y = "Count") +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+)
 
 #--------------------- BÀI TOÁN 2 MẪU: SO SÁNH 2 TRUNG BÌNH ---------------------
 # H0: mu_Xeon = mu_Core   ;   H1: mu_Xeon > mu_Core
@@ -339,8 +371,8 @@ data.frame(Nhom = c("Xeon", "Core"), n = c(n1, n2), Mean = c(x1, x2), SD = c(s1,
 shapiro.test(xeon)
 shapiro.test(core)
 par(mfrow = c(1, 2))
-qqnorm(xeon, main = "QQ-plot giá - Xeon"); qqline(xeon, col = "red")
-qqnorm(core, main = "QQ-plot giá - Core"); qqline(core, col = "red")
+qqnorm(xeon, main = "QQ-plot price - Xeon"); qqline(xeon, col = "red")
+qqnorm(core, main = "QQ-plot price - Core"); qqline(core, col = "red")
 par(mfrow = c(1, 1))
 
 # Dạng 4d: hai tổng thể không chuẩn, n1, n2 >= 30
@@ -348,6 +380,15 @@ z_qs <- (x1 - x2) / sqrt(s1^2 / n1 + s2^2 / n2)
 z_qs
 qnorm(0.95)
 1 - pnorm(z_qs)
+
+# Đối chiếu phi tham số: Mann-Whitney U (không giả định chuẩn, ít bị ảnh hưởng bởi giá rất cao)
+# H0: hai phân phối giá như nhau ; H1: giá Xeon dịch chuyển về phía lớn hơn Core
+mw_test <- wilcox.test(xeon, core, alternative = "greater", conf.int = TRUE)
+print(mw_test)
+print(paste("Ket luan Mann-Whitney: p =", signif(mw_test$p.value, 4), "->", conclude_h0(mw_test$p.value)))
+# Xác suất ngẫu nhiên một CPU Xeon đắt hơn một CPU Core (common-language effect size)
+auc_xeon_core <- as.numeric(mw_test$statistic) / (n1 * n2)
+print(paste("P(Xeon > Core) =", round(auc_xeon_core, 4)))
 
 
 #--------------------- ANOVA 1 YẾU TỐ ---------------------
@@ -501,6 +542,29 @@ print(
     theme_minimal()
 )
 
+# 1b. HỒI QUY ĐƠN VỚI log(Cache_Size) (xử lý độ cong của mô hình đơn)
+# Cache_Size lệch phải (0.5 đến 60 MB) và giá tăng chậm dần theo cache, nên lấy log cả hai vế
+print("--- 1b. Simple Linear Regression (Log_Price ~ log(Cache_Size)) ---")
+simple_log_model <- lm(Log_Price ~ log(Cache_Size), data = train_data)
+print(summary(simple_log_model))
+print(paste("AIC: simple =", round(AIC(simple_model), 1), "| simple log-log =",
+            round(AIC(simple_log_model), 1)))
+
+y_train_simple_log <- predict(simple_log_model, newdata = train_data)
+y_test_simple_log  <- predict(simple_log_model, newdata = test_data)
+mse_test_simple_log <- mse(test_data$Log_Price, y_test_simple_log)
+mae_train_simple_log_usd <- mean(abs(exp(y_train_simple_log) - train_data$Recommended_Customer_Price))
+mae_test_simple_log_usd  <- mean(abs(exp(y_test_simple_log) - test_data$Recommended_Customer_Price))
+
+print(
+  ggplot(train_data, aes(x = log(Cache_Size), y = Log_Price)) +
+    geom_point(color = "darkblue", alpha = 0.5) +
+    geom_smooth(method = "lm", formula = y ~ x, color = "red", se = TRUE) +
+    labs(title = "Simple Regression: Log(Price) vs log(Cache Size)",
+         x = "log(Cache Size) (MB)", y = "Log(Recommended Customer Price)") +
+    theme_minimal()
+)
+
 # 2. HỒI QUY TUYẾN TÍNH BỘI (MULTIPLE LINEAR REGRESSION)
 print("--- 2. Multiple Linear Regression with stepAIC ---")
 predictors <- c("Lithography", "nb_of_Cores", "nb_of_Threads", 
@@ -560,17 +624,28 @@ cv_results_simple <- cv_regression(reg_data, formula(simple_model), K = 5, seed 
 print("--- 5-fold CV: Simple Linear Regression ---")
 print(cv_results_simple)
 
+cv_results_simple_log <- cv_regression(reg_data, formula(simple_log_model), K = 5, seed = 100)
+print("--- 5-fold CV: Simple Linear Regression (log Cache_Size) ---")
+print(cv_results_simple_log)
+
 # 4. SO SÁNH CÁC MÔ HÌNH
 comparison_table <- data.frame(
-  Model = c("Baseline (Mean)", "Simple Linear (Cache_Size)", "Multiple Linear (stepAIC)"),
-  MSE_Test_Log = c(round(mse_test_baseline, 4), round(mse_test_simple, 4), round(mse_test_multi, 4)),
+  Model = c("Baseline (Mean)", "Simple Linear (Cache_Size)", "Simple Linear (log Cache_Size)",
+            "Multiple Linear (stepAIC)"),
+  MSE_Test_Log = c(round(mse_test_baseline, 4), round(mse_test_simple, 4),
+                   round(mse_test_simple_log, 4), round(mse_test_multi, 4)),
   MAE_Test_USD = c(round(mean(abs(exp(baseline_pred) - test_data$Recommended_Customer_Price)), 2),
                    round(mae_test_simple_usd, 2),
+                   round(mae_test_simple_log_usd, 2),
                    round(mae_test_multi_usd, 2)),
-  CV_MSE_Log = c(NA, round(cv_results_simple$CV_MSE_log, 4), round(cv_results$CV_MSE_log, 4)),
-  CV_MAE_USD = c(NA, round(cv_results_simple$CV_MAE_USD, 2), round(cv_results$CV_MAE_USD, 2)),
-  R_squared = c(NA, round(summary(simple_model)$r.squared, 4), round(summary(multi_model)$r.squared, 4)),
-  Adj_R_squared = c(NA, round(summary(simple_model)$adj.r.squared, 4), round(summary(multi_model)$adj.r.squared, 4))
+  CV_MSE_Log = c(NA, round(cv_results_simple$CV_MSE_log, 4),
+                 round(cv_results_simple_log$CV_MSE_log, 4), round(cv_results$CV_MSE_log, 4)),
+  CV_MAE_USD = c(NA, round(cv_results_simple$CV_MAE_USD, 2),
+                 round(cv_results_simple_log$CV_MAE_USD, 2), round(cv_results$CV_MAE_USD, 2)),
+  R_squared = c(NA, round(summary(simple_model)$r.squared, 4),
+                round(summary(simple_log_model)$r.squared, 4), round(summary(multi_model)$r.squared, 4)),
+  Adj_R_squared = c(NA, round(summary(simple_model)$adj.r.squared, 4),
+                    round(summary(simple_log_model)$adj.r.squared, 4), round(summary(multi_model)$adj.r.squared, 4))
 )
 print("=== BANG TONG HOP SO SANH MO HINH ===")
 print(comparison_table)
@@ -578,16 +653,18 @@ print(comparison_table)
 # 5. CHẨN ĐOÁN PHẦN DƯ (DIAGNOSTICS PLOTS) - mỗi mô hình một trang 2x2
 par(mfrow = c(2, 2))
 plot(simple_model, sub.caption = "Residual Diagnostics: Simple Linear Regression (Log_Price ~ Cache_Size)")
+plot(simple_log_model, sub.caption = "Residual Diagnostics: Simple Regression (Log_Price ~ log(Cache_Size))")
 plot(multi_model, sub.caption = "Residual Diagnostics: Multiple Linear Regression (stepAIC)")
 par(mfrow = c(1, 1))
 
 # Đồ thị so sánh MAE giữa Train, Test và 5-fold CV
 metric_plot_data <- data.frame(
-  Model = factor(rep(c("Simple Linear", "Multiple Linear"), each = 3),
-                 levels = c("Simple Linear", "Multiple Linear")),
-  Type = factor(rep(c("Train", "Test", "5-fold CV"), times = 2),
+  Model = factor(rep(c("Simple Linear", "Simple log-log", "Multiple Linear"), each = 3),
+                 levels = c("Simple Linear", "Simple log-log", "Multiple Linear")),
+  Type = factor(rep(c("Train", "Test", "5-fold CV"), times = 3),
                 levels = c("Train", "Test", "5-fold CV")),
   MAE_USD = c(mae_train_simple_usd, mae_test_simple_usd, cv_results_simple$CV_MAE_USD,
+              mae_train_simple_log_usd, mae_test_simple_log_usd, cv_results_simple_log$CV_MAE_USD,
               mae_train_multi_usd, mae_test_multi_usd, cv_results$CV_MAE_USD)
 )
 
